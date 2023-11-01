@@ -5,6 +5,8 @@
     <Authors>Sebastien Ros</Authors>
 
     <PackageProjectUrl>https://github.com/NoorDigitalAgency/fluid</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/NoorDigitalAgency/fluid</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
 
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
@@ -19,8 +21,10 @@
     <NoWarn>$(NoWarn);1591</NoWarn>
     
     <!-- Sourcelink -->
-    <PublishRepositoryUrl>true</PublishRepositoryUrl>
-    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <DebugType>embedded</DebugType>
+    <EmbedAllSources>true</EmbedAllSources>
+
+    <ContinuousIntegrationBuild>True</ContinuousIntegrationBuild>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
 
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -32,8 +36,6 @@
     <GenerateAssemblyCopyrightAttribute>false</GenerateAssemblyCopyrightAttribute>
     <GenerateAssemblyVersionAttribute>false</GenerateAssemblyVersionAttribute>
     <GenerateAssemblyFileVersionAttribute>false</GenerateAssemblyFileVersionAttribute>
-    <SignAssembly>true</SignAssembly>
-    <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)Fluid.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
 </Project>
