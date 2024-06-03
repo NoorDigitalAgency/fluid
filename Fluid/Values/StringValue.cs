@@ -1,8 +1,6 @@
-﻿using Parlot;
-using System;
-using System.Collections.Generic;
+﻿using Fluid.Utils;
+using Parlot;
 using System.Globalization;
-using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text.Encodings.Web;
 
@@ -20,7 +18,7 @@ namespace Fluid.Values
         {
             for (var i = 0; i < CharToString.Length; ++i)
             {
-                var c = (char) i;
+                var c = (char)i;
                 CharToString[i] = new StringValue(c.ToString());
             }
         }
@@ -49,7 +47,7 @@ namespace Fluid.Values
         internal static StringValue Create(char c)
         {
             var temp = CharToString;
-            if ((uint) c < (uint) temp.Length)
+            if ((uint)c < (uint)temp.Length)
             {
                 return temp[c];
             }
@@ -91,13 +89,13 @@ namespace Fluid.Values
         public override bool Equals(FluidValue other)
         {
             if (other.Type == FluidValues.String) return _value == other.ToStringValue();
-            
+
             // Delegating other types 
             if (other == BlankValue.Instance || other == NilValue.Instance || other == EmptyValue.Instance)
             {
                 return other.Equals(this);
             }
-            
+
             return false;
         }
 
@@ -113,7 +111,7 @@ namespace Fluid.Values
             {
                 "size" => NumberValue.Create(_value.Length),
                 "first" => _value.Length > 0 ? Create(_value[0]) : NilValue.Instance,
-                "last" => _value.Length > 0 ? Create(_value[_value.Length - 1]) : NilValue.Instance,
+                "last" => _value.Length > 0 ? Create(_value[^1]) : NilValue.Instance,
                 _ => NilValue.Instance,
             };
         }
@@ -143,6 +141,7 @@ namespace Fluid.Values
             return _value;
         }
 
+        [Obsolete("WriteTo is obsolete, prefer the WriteToAsync method.")]
         public override void WriteTo(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
         {
             AssertWriteToParameters(writer, encoder, cultureInfo);
@@ -168,6 +167,46 @@ namespace Fluid.Values
             }
         }
 
+        public override ValueTask WriteToAsync(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
+        {
+            AssertWriteToParameters(writer, encoder, cultureInfo);
+            if (string.IsNullOrEmpty(_value))
+            {
+                return default;
+            }
+
+            Task task;
+
+            if (Encode)
+            {
+                // perf: Don't use this overload
+                // encoder.Encode(writer, _value);
+
+                // Use a transient string instead of calling
+                // encoder.Encode(TextWriter) since it would
+                // call writer.Write on each char if the string
+                // has even a single char to encode
+                task = writer.WriteAsync(encoder.Encode(_value));
+            }
+            else
+            {
+                task = writer.WriteAsync(_value);
+            }
+
+            if (task.IsCompletedSuccessfully())
+            {
+                return default;
+            }
+
+            return Awaited(task);
+
+            static async ValueTask Awaited(Task t)
+            {
+                await t;
+                return;
+            }
+        }
+
         public override object ToObjectValue()
         {
             return _value;
@@ -183,9 +222,9 @@ namespace Fluid.Values
             yield return this;
         }
 
-        public override bool Equals(object other)
+        public override bool Equals(object obj)
         {
-            return other is StringValue s && Equals(s);
+            return obj is StringValue s && Equals(s);
         }
 
         public bool Equals(StringValue other)

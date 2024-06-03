@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Reflection;
+﻿using System.Reflection;
 using System.Runtime.CompilerServices;
 
 namespace Fluid
@@ -69,7 +67,7 @@ namespace Fluid
         {
             if (accessors is null)
             {
-                throw new ArgumentNullException(nameof(accessors));
+                ExceptionHelper.ThrowArgumentNullException(nameof(accessors));
             }
 
             // Create a copy of the current dictionary since types are added during the initialization of the app.

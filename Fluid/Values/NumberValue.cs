@@ -1,6 +1,5 @@
-﻿using System;
+﻿using Fluid.Utils;
 using System.Globalization;
-using System.IO;
 using System.Text.Encodings.Web;
 
 namespace Fluid.Values
@@ -59,10 +58,30 @@ namespace Fluid.Values
             return _value.ToString(CultureInfo.InvariantCulture);
         }
 
+        [Obsolete("WriteTo is obsolete, prefer the WriteToAsync method.")]
         public override void WriteTo(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
         {
             AssertWriteToParameters(writer, encoder, cultureInfo);
             writer.Write(encoder.Encode(_value.ToString(cultureInfo)));
+        }
+
+        public override ValueTask WriteToAsync(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
+        {
+            AssertWriteToParameters(writer, encoder, cultureInfo);
+            var task = writer.WriteAsync(encoder.Encode(_value.ToString(cultureInfo)));
+
+            if (task.IsCompletedSuccessfully())
+            {
+                return default;
+            }
+
+            return Awaited(task);
+
+            static async ValueTask Awaited(Task t)
+            {
+                await t;
+                return;
+            }
         }
 
         public override object ToObjectValue()
@@ -70,9 +89,9 @@ namespace Fluid.Values
             return _value;
         }
 
-        public override bool Equals(object other)
+        public override bool Equals(object obj)
         {
-            return other is NumberValue n && Equals(n);
+            return obj is NumberValue n && Equals(n);
         }
 
         public bool Equals(NumberValue other)
@@ -113,7 +132,7 @@ namespace Fluid.Values
         internal static NumberValue Create(uint value)
         {
             var temp = IntToString;
-            if (value < (uint) temp.Length)
+            if (value < (uint)temp.Length)
             {
                 return temp[value];
             }
@@ -137,9 +156,9 @@ namespace Fluid.Values
                 return 0;
             }
 
-            int[] bits = decimal.GetBits(value);
+            var bits = decimal.GetBits(value);
 
-            return (int) ((bits[3] >> 16) & 0x7F);
+            return (int)((bits[3] >> 16) & 0x7F);
         }
     }
 }

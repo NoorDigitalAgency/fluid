@@ -1,19 +1,24 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections;
 using System.Diagnostics;
 using System.Globalization;
-using System.IO;
-using System.Linq;
 using System.Text.Encodings.Web;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Fluid.Values
 {
+#pragma warning disable CA1067 // should override Equals because it implements IEquatable<T>
     public abstract class FluidValue : IEquatable<FluidValue>
+#pragma warning restore CA1067
     {
+        [Obsolete("WriteTo is obsolete, prefer the WriteToAsync method.")]
         public abstract void WriteTo(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo);
+
+        public virtual ValueTask WriteToAsync(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
+        {
+#pragma warning disable CS0618 // Type or member is obsolete
+            WriteTo(writer, encoder, cultureInfo);
+#pragma warning restore CS0618 // Type or member is obsolete
+            return default;
+        }
 
         private static Dictionary<Type, Type> _genericDictionaryTypeCache = new();
 
@@ -170,11 +175,33 @@ namespace Fluid.Values
                             var baseDateTime = DateTimeOffset.FromUnixTimeMilliseconds((long)timeSpan.TotalMilliseconds).ToOffset(options.TimeZone.BaseUtcOffset);
                             return new DateTimeValue(baseDateTime);
 
+                        case IConvertible convertible:
+                            var typeCode = convertible.GetTypeCode();
+                            return typeCode switch
+                            {
+                                TypeCode.Boolean => BooleanValue.Create(convertible.ToBoolean(options.CultureInfo)),
+                                TypeCode.Char => new StringValue(convertible.ToString(options.CultureInfo)),
+                                TypeCode.SByte => NumberValue.Create(convertible.ToInt32(options.CultureInfo)),
+                                TypeCode.Byte => NumberValue.Create(convertible.ToUInt32(options.CultureInfo)),
+                                TypeCode.Int16 => NumberValue.Create(convertible.ToInt32(options.CultureInfo)),
+                                TypeCode.UInt16 => NumberValue.Create(convertible.ToUInt32(options.CultureInfo)),
+                                TypeCode.Int32 => NumberValue.Create(convertible.ToInt32(options.CultureInfo)),
+                                TypeCode.UInt32 => NumberValue.Create(convertible.ToUInt32(options.CultureInfo)),
+                                TypeCode.Int64 => NumberValue.Create(convertible.ToDecimal(options.CultureInfo)),
+                                TypeCode.UInt64 => NumberValue.Create(convertible.ToDecimal(options.CultureInfo)),
+                                TypeCode.Single => NumberValue.Create(convertible.ToDecimal(options.CultureInfo)),
+                                TypeCode.Double => NumberValue.Create(convertible.ToDecimal(options.CultureInfo)),
+                                TypeCode.Decimal => NumberValue.Create(convertible.ToDecimal(options.CultureInfo)),
+                                TypeCode.DateTime => new DateTimeValue(convertible.ToDateTime(options.CultureInfo)),
+                                TypeCode.String => new StringValue(convertible.ToString(options.CultureInfo)),
+                                TypeCode.Object => new StringValue(convertible.ToString(options.CultureInfo)),
+                                TypeCode.DBNull => NilValue.Instance,
+                                TypeCode.Empty => NilValue.Instance,
+                                _ => throw new InvalidOperationException(),
+                            };
+
                         case IFormattable formattable:
                             return new StringValue(formattable.ToString(null, options.CultureInfo));
-
-                        case IConvertible convertible:
-                            return new StringValue(convertible.ToString(options.CultureInfo));
 
                         case IDictionary<string, object> dictionary:
                             return new DictionaryValue(new ObjectDictionaryFluidIndexable<object>(dictionary, options));
@@ -219,11 +246,11 @@ namespace Fluid.Values
 
                     switch (value)
                     {
-                        case IList<FluidValue> list:
+                        case IReadOnlyList<FluidValue> list:
                             return new ArrayValue(list);
 
                         case IEnumerable<FluidValue> enumerable:
-                            return new ArrayValue(enumerable);
+                            return new ArrayValue(enumerable.ToArray());
 
                         case IList list:
                             var values = new FluidValue[list.Count];
@@ -248,7 +275,7 @@ namespace Fluid.Values
                     return new DateTimeValue((DateTime)value);
                 case TypeCode.Char:
                 case TypeCode.String:
-                    return new StringValue(Convert.ToString(value, CultureInfo.InvariantCulture));
+                    return new StringValue(Convert.ToString(value, options.CultureInfo));
                 default:
                     throw new InvalidOperationException();
             }
@@ -262,7 +289,7 @@ namespace Fluid.Values
 
         public virtual IEnumerable<FluidValue> Enumerate(TemplateContext context)
         {
-            return Array.Empty<FluidValue>();
+            return [];
         }
 
         #region Obsolete members
@@ -270,13 +297,13 @@ namespace Fluid.Values
         [Obsolete("Use Enumerate(TemplateContext) instead.")]
         public virtual IEnumerable<FluidValue> Enumerate()
         {
-            return Array.Empty<FluidValue>();
+            return [];
         }
 
         [Obsolete("Use Enumerate(TemplateContext) instead.")]
         internal virtual string[] ToStringArray()
         {
-            return Array.Empty<string>();
+            return [];
         }
 
         [Obsolete("Use Enumerate(TemplateContext) instead.")]
@@ -316,6 +343,9 @@ namespace Fluid.Values
         }
         #endregion
 
-        public static implicit operator ValueTask<FluidValue>(FluidValue value) => new(value);
+        public static implicit operator ValueTask<FluidValue>(FluidValue value)
+        {
+            return new(value);
+        }
     }
 }

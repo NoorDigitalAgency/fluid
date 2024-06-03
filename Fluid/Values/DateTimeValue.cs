@@ -1,6 +1,5 @@
-﻿using System;
+﻿using Fluid.Utils;
 using System.Globalization;
-using System.IO;
 using System.Text.Encodings.Web;
 
 namespace Fluid.Values
@@ -46,10 +45,30 @@ namespace Fluid.Values
             return _value.ToString("u", CultureInfo.InvariantCulture);
         }
 
+        [Obsolete("WriteTo is obsolete, prefer the WriteToAsync method.")]
         public override void WriteTo(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
         {
             AssertWriteToParameters(writer, encoder, cultureInfo);
             writer.Write(_value.ToString("u", cultureInfo));
+        }
+
+        public override ValueTask WriteToAsync(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
+        {
+            AssertWriteToParameters(writer, encoder, cultureInfo);
+            var task = writer.WriteAsync(_value.ToString("u", cultureInfo));
+
+            if (task.IsCompletedSuccessfully())
+            {
+                return default;
+            }
+
+            return Awaited(task);
+
+            static async ValueTask Awaited(Task t)
+            {
+                await t;
+                return;
+            }
         }
 
         public override object ToObjectValue()
@@ -57,10 +76,10 @@ namespace Fluid.Values
             return _value;
         }
 
-        public override bool Equals(object other)
+        public override bool Equals(object obj)
         {
             // The is operator will return false if null
-            if (other is DateTimeOffset otherValue)
+            if (obj is DateTimeOffset otherValue)
             {
                 return _value.Equals(otherValue);
             }

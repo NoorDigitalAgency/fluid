@@ -1,15 +1,12 @@
-﻿using System.Collections.Generic;
-using System.IO;
-using System.Text.Encodings.Web;
-using System.Threading.Tasks;
+﻿using System.Text.Encodings.Web;
 
 namespace Fluid.Ast
 {
-    public class UnlessStatement : TagStatement
+    public sealed class UnlessStatement : TagStatement
     {
         public UnlessStatement(
             Expression condition,
-            List<Statement> statements,
+            IReadOnlyList<Statement> statements,
             ElseStatement elseStatement = null) : base(statements)
         {
             Condition = condition;
@@ -25,9 +22,9 @@ namespace Fluid.Ast
 
             if (!result)
             {
-                for (var i = 0; i < _statements.Count; i++)
+                for (var i = 0; i < Statements.Count; i++)
                 {
-                    var statement = _statements[i];
+                    var statement = Statements[i];
                     var completion = await statement.WriteToAsync(writer, encoder, context);
 
                     if (completion != Completion.Normal)
@@ -50,5 +47,7 @@ namespace Fluid.Ast
 
             return Completion.Normal;
         }
+
+        protected internal override Statement Accept(AstVisitor visitor) => visitor.VisitUnlessStatement(this);
     }
 }
