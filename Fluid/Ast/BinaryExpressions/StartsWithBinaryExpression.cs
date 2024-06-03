@@ -1,9 +1,8 @@
 ﻿using Fluid.Values;
-using System.Threading.Tasks;
 
 namespace Fluid.Ast.BinaryExpressions
 {
-    public class StartsWithBinaryExpression : BinaryExpression
+    public sealed class StartsWithBinaryExpression : BinaryExpression
     {
         public StartsWithBinaryExpression(Expression left, Expression right) : base(left, right)
         {
@@ -28,5 +27,7 @@ namespace Fluid.Ast.BinaryExpressions
                         : BooleanValue.False;
             }
         }
+
+        protected internal override Expression Accept(AstVisitor visitor) => visitor.VisitStartsWithBinaryExpression(this);
     }
 }

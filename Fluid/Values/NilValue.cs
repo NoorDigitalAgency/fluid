@@ -1,5 +1,4 @@
 ﻿using System.Globalization;
-using System.IO;
 using System.Text.Encodings.Web;
 using System.Threading.Tasks;
 
@@ -54,6 +53,7 @@ namespace Fluid.Values
             return true;
         }
 
+        [Obsolete("WriteTo is obsolete, prefer the WriteToAsync method.")]
         public override void WriteTo(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
         {
         }
@@ -63,10 +63,10 @@ namespace Fluid.Values
             return default;
         }
 
-        public override bool Equals(object other)
+        public override bool Equals(object obj)
         {
             // The is operator will return false if null
-            return other is NilValue;
+            return obj is NilValue;
         }
 
         public override int GetHashCode()

@@ -1,15 +1,13 @@
 ﻿using Fluid.Values;
-using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Threading.Tasks;
+using System.Runtime.CompilerServices;
 
 namespace Fluid
 {
     public class TemplateContext
     {
-        protected int _recursion = 0;
-        protected int _steps = 0;
+        protected int _recursion;
+        protected int _steps;
 
         /// <summary>
         /// Initializes a new instance of <see cref="TemplateContext"/>.
@@ -55,6 +53,7 @@ namespace Fluid
             TimeZone = options.TimeZone;
             Captured = options.Captured;
             Now = options.Now;
+            MaxSteps = options.MaxSteps;
         }
 
         /// <summary>
@@ -86,6 +85,11 @@ namespace Fluid
         public TemplateOptions Options { get; protected set; }
 
         /// <summary>
+        /// Gets or sets the maximum number of steps a script can execute. Leave to 0 for unlimited.
+        /// </summary>
+        public int MaxSteps { get; set; } = TemplateOptions.Default.MaxSteps;
+
+        /// <summary>
         /// Gets or sets the <see cref="CultureInfo"/> instance used to render locale values like dates and numbers.
         /// </summary>
         public CultureInfo CultureInfo { get; set; } = TemplateOptions.Default.CultureInfo;
@@ -103,10 +107,10 @@ namespace Fluid
         /// <summary>
         /// Increments the number of statements the current template is processing.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void IncrementSteps()
         {
-            var maxSteps = Options.MaxSteps;
-            if (maxSteps > 0 && _steps++ > maxSteps)
+            if (MaxSteps > 0 && _steps++ > MaxSteps)
             {
                 ExceptionHelper.ThrowMaximumRecursionException();
             }

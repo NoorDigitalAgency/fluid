@@ -1,12 +1,9 @@
-﻿using System.Collections.Generic;
-using System.IO;
-using System.Text.Encodings.Web;
-using System.Threading.Tasks;
+﻿using System.Text.Encodings.Web;
 using Fluid.Values;
 
 namespace Fluid.Ast
 {
-    public class OutputStatement : Statement
+    public sealed class OutputStatement : Statement
     {
         public OutputStatement(Expression expression)
         {
@@ -15,24 +12,45 @@ namespace Fluid.Ast
 
         public Expression Expression { get; }
 
-        public IList<FilterExpression> Filters { get; }
+        public IReadOnlyList<FilterExpression> Filters { get; }
 
         public override async ValueTask<Completion> WriteToAsync(TextWriter writer, TextEncoder encoder, TemplateContext context)
         {
+            static async ValueTask<Completion> Awaited(
+                ValueTask<FluidValue> t,
+                TextWriter w,
+                TextEncoder enc,
+                TemplateContext ctx)
+            {
+                var value = await t;
+                await value.WriteToAsync(w, enc, ctx.CultureInfo);
+                return Completion.Normal;
+            }
+
             context.IncrementSteps();
 
             var task = Expression.EvaluateAsync(context);
             if (task.IsCompletedSuccessfully)
             {
-                await task.Result.WriteToAsync(writer, encoder, context.CultureInfo);
-                return Completion.Normal;
+                var valueTask = task.Result.WriteToAsync(writer, encoder, context.CultureInfo);
+
+                if (valueTask.IsCompletedSuccessfully)
+                {
+                    return new ValueTask<Completion>(Completion.Normal);
+                }
+
+                return AwaitedWriteTo(valueTask);
+
+                static async ValueTask<Completion> AwaitedWriteTo(ValueTask t)
+                {
+                    await t;
+                    return Completion.Normal;
+                }
             }
 
-            var value = await task;
-
-            await value.WriteToAsync(writer, encoder, context.CultureInfo);
-
-            return Completion.Normal;
+            return Awaited(task, writer, encoder, context);
         }
+
+        protected internal override Statement Accept(AstVisitor visitor) => visitor.VisitOutputStatement(this);
     }
 }

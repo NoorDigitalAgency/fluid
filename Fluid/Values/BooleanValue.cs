@@ -1,5 +1,5 @@
-﻿using System.Globalization;
-using System.IO;
+﻿using Fluid.Utils;
+using System.Globalization;
 using System.Text.Encodings.Web;
 using System.Threading.Tasks;
 
@@ -30,8 +30,8 @@ namespace Fluid.Values
         public override bool Equals(FluidValue other)
         {
             // blank == false -> true
-            if (other.Type == FluidValues.Blank) return _value == false;
-            
+            if (other.Type == FluidValues.Blank) return !_value;
+
             return _value == other.ToBooleanValue();
         }
 
@@ -50,16 +50,30 @@ namespace Fluid.Values
             return _value ? "true" : "false";
         }
 
+        [Obsolete("WriteTo is obsolete, prefer the WriteToAsync method.")]
         public override void WriteTo(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
         {
             AssertWriteToParameters(writer, encoder, cultureInfo);
             writer.Write(encoder.Encode(ToStringValue()));
         }
 
-        public override async ValueTask WriteToAsync(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
+        public override ValueTask WriteToAsync(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
         {
             AssertWriteToParameters(writer, encoder, cultureInfo);
-            await writer.WriteAsync(encoder.Encode(ToStringValue()));
+            var task = writer.WriteAsync(encoder.Encode(ToStringValue()));
+
+            if (task.IsCompletedSuccessfully())
+            {
+                return default;
+            }
+
+            return Awaited(task);
+
+            static async ValueTask Awaited(Task t)
+            {
+                await t;
+                return;
+            }
         }
 
         public override object ToObjectValue()
@@ -67,10 +81,10 @@ namespace Fluid.Values
             return _value ? BoxedTrue : BoxedFalse;
         }
 
-        public override bool Equals(object other)
+        public override bool Equals(object obj)
         {
             // The is operator will return false if null
-            if (other is BooleanValue otherValue)
+            if (obj is BooleanValue otherValue)
             {
                 return _value.Equals(otherValue._value);
             }

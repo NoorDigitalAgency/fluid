@@ -1,13 +1,10 @@
-﻿using System.Collections.Generic;
-using System.IO;
-using System.Text.Encodings.Web;
-using System.Threading.Tasks;
+﻿using System.Text.Encodings.Web;
 
 namespace Fluid.Ast
 {
-    public class ElseIfStatement : TagStatement
+    public sealed class ElseIfStatement : TagStatement
     {
-        public ElseIfStatement(Expression condition, List<Statement> statements) : base(statements)
+        public ElseIfStatement(Expression condition, IReadOnlyList<Statement> statements) : base(statements)
         {
             Condition = condition;
         }
@@ -17,11 +14,11 @@ namespace Fluid.Ast
         public override ValueTask<Completion> WriteToAsync(TextWriter writer, TextEncoder encoder, TemplateContext context)
         {
             // Process statements until next block or end of statements
-            for (var i = 0; i < _statements.Count; i++)
+            for (var i = 0; i < Statements.Count; i++)
             {
                 context.IncrementSteps();
 
-                var task = _statements[i].WriteToAsync(writer, encoder, context);
+                var task = Statements[i].WriteToAsync(writer, encoder, context);
                 if (!task.IsCompletedSuccessfully)
                 {
                     return Awaited(task, i + 1, writer, encoder, context);
@@ -54,10 +51,10 @@ namespace Fluid.Ast
                 return completion;
             }
             // Process statements until next block or end of statements
-            for (var index = startIndex; index < _statements.Count; index++)
+            for (var index = startIndex; index < Statements.Count; index++)
             {
                 context.IncrementSteps();
-                completion = await _statements[index].WriteToAsync(writer, encoder, context);
+                completion = await Statements[index].WriteToAsync(writer, encoder, context);
                 if (completion != Completion.Normal)
                 {
                     // Stop processing the block statements
@@ -68,5 +65,7 @@ namespace Fluid.Ast
 
             return Completion.Normal;
         }
+
+        protected internal override Statement Accept(AstVisitor visitor) => visitor.VisitElseIfStatement(this);
     }
 }

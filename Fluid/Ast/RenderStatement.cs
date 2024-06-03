@@ -1,36 +1,32 @@
 ﻿using Fluid.Values;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Text.Encodings.Web;
-using System.Threading.Tasks;
-using System.Threading;
 
 namespace Fluid.Ast
 {
     /// <summary>
     /// The render tag can only access immutable environments, which means the scope of the context that was passed to the main template, the options' scope, and the model.
     /// </summary>
-    public class RenderStatement : Statement
+#pragma warning disable CA1001 // Types that own disposable fields should be disposable
+    public sealed class RenderStatement : Statement
+#pragma warning restore CA1001
     {
         public const string ViewExtension = ".liquid";
-        private readonly FluidParser _parser;
         private volatile CachedTemplate _cachedTemplate;
         private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1);
 
-        public RenderStatement(FluidParser parser, string path, Expression with = null, Expression @for = null, string alias = null, IList<AssignStatement> assignStatements = null)
+        public RenderStatement(FluidParser parser, string path, Expression with = null, Expression @for = null, string alias = null, IReadOnlyList<AssignStatement> assignStatements = null)
         {
-            _parser = parser;
+            Parser = parser;
             Path = path;
             With = with;
             For = @for;
             Alias = alias;
-            AssignStatements = assignStatements;
+            AssignStatements = assignStatements ?? [];
         }
 
+        public FluidParser Parser { get; }
         public string Path { get; }
-        public IList<AssignStatement> AssignStatements { get; }
+        public IReadOnlyList<AssignStatement> AssignStatements { get; }
         public Expression With { get; }
         public Expression For { get; }
         public string Alias { get; }
@@ -71,7 +67,7 @@ namespace Fluid.Ast
                             content = await streamReader.ReadToEndAsync();
                         }
 
-                        if (!_parser.TryParse(content, out var template, out var errors))
+                        if (!Parser.TryParse(content, out var template, out var errors))
                         {
                             throw new ParseException(errors);
                         }
@@ -102,7 +98,7 @@ namespace Fluid.Ast
                     context.SetValue(Alias ?? _cachedTemplate.Name, with);
                     await _cachedTemplate.Template.RenderAsync(writer, encoder, context);
                 }
-                else if (AssignStatements != null)
+                else if (AssignStatements.Count > 0)
                 {
                     var length = AssignStatements.Count;
                     for (var i = 0; i < length; i++)
@@ -175,7 +171,8 @@ namespace Fluid.Ast
             return Completion.Normal;
         }
 
-        private record class CachedTemplate (IFluidTemplate Template, string Name);
+        protected internal override Statement Accept(AstVisitor visitor) => visitor.VisitRenderStatement(this);
 
+        private sealed record CachedTemplate(IFluidTemplate Template, string Name);
     }
 }

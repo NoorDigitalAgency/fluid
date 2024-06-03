@@ -1,11 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using Fluid.Values;
 
 namespace Fluid
 {
-    public class Scope
+    public sealed class Scope
     {
         private Dictionary<string, FluidValue> _properties;
         private readonly bool _forLoopScope;

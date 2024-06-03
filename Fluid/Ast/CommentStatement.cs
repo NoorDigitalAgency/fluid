@@ -1,11 +1,9 @@
 ﻿using Parlot;
-using System.IO;
 using System.Text.Encodings.Web;
-using System.Threading.Tasks;
 
 namespace Fluid.Ast
 {
-    public class CommentStatement : Statement
+    public sealed class CommentStatement : Statement
     {
         private readonly TextSpan _text;
 
@@ -22,5 +20,7 @@ namespace Fluid.Ast
 
             return Normal();
         }
+
+        protected internal override Statement Accept(AstVisitor visitor) => visitor.VisitCommentStatement(this);
     }
 }

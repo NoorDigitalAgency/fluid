@@ -15,8 +15,8 @@ To see the corresponding content for v1.0 use [this version](https://github.com/
 
 ## Tutorials
 
-[Deane Barker](https://twitter.com/deane_barker) wrote a [very comprehensive tutorial](https://deanebarker.net/tech/fluid/) on how to write Liquid templates with Fluid.
-[Deane Barker](https://twitter.com/deane_barker) wrote [Introduction: The Four Levels of Fluid Development]([https://deanebarker.net/tech/fluid/](https://deanebarker.net/tech/fluid/intro/)) describing different stages of usages of Fluid.
+[Deane Barker](https://deanebarker/net) wrote a [very comprehensive tutorial](https://deanebarker.net/tech/fluid/) on how to write Liquid templates with Fluid.
+For a high-level overview, read [The Four Levels of Fluid Development](https://deanebarker.net/tech/fluid/intro/) describing different stages of usages of Fluid.
 
 <br>
 
@@ -45,6 +45,7 @@ To see the corresponding content for v1.0 use [this version](https://github.com/
 - [Whitespace control](#whitespace-control)
 - [Custom filters](#custom-filters)
 - [Functions](#functions)
+- [Visiting and altering a template](#visiting-and-altering-a-template)
 - [Performance](#performance)
 - [Used by](#used-by)
 
@@ -481,11 +482,13 @@ Blocks are created the same way as tags, and the lambda expression can then acce
 
 ```csharp
 
-parser.RegisterExpressionBlock("repeat", (value, statements, writer, encoder, context) =>
+parser.RegisterExpressionBlock("repeat", async (value, statements, writer, encoder, context) =>
 {
-    for (var i = 0; i < value.ToNumber(); i++)
+    var fluidValue = await value.EvaluateAsync(context);
+
+    for (var i = 0; i < fluidValue.ToNumberValue(); i++)
     {
-      await return statements.RenderStatementsAsync(writer, encoder, context);
+        await statements.RenderStatementsAsync(writer, encoder, context);
     }
 
     return Completion.Normal;
@@ -560,6 +563,17 @@ __Usage__
 Hello
 ```
 
+## Accessing the concrete syntax tree
+
+The syntax tree is accessible by casting the template to its concrete `FluidTemplate` type and using the `Statements` property.
+
+#### Source
+
+```csharp
+var template = (FluidTemplate)iTemplate;
+var statements = template.Statements;
+```
+
 <br>
 
 ## ASP.NET MVC View Engine
@@ -576,7 +590,7 @@ The package `Fluid.MvcViewEngine` provides a convenient way to use Liquid as a r
 
 #### Sample
 ```csharp
-using FluidMvcViewEngine;
+using Fluid.MvcViewEngine;
 
 public class Startup
 {
@@ -921,7 +935,17 @@ Now `field` is available as a local property of the template and can be invoked 
 {{ field('pass', type='password') }}
 ```
 
-> Macros need to be defined before they are used as they are discovered as the template is executed. They can also be defined in external templates and imported using the `{% include %}` tag.
+> Macros need to be defined before they are used as they are discovered as the template is executed.
+
+### Importing functions from external templates
+Macros defined in an external template **must** be imported before they can be invoked.
+
+```
+{% from 'forms' import field %}
+
+{{ field('user') }}
+{{ field('pass', type='password') }}
+```
 
 ### Extensibility
 
@@ -947,6 +971,96 @@ template.Render(context);
 
 <br>
 
+## Visiting and altering a template
+
+Fluid provides a __Visitor__ pattern allowing you to analyze what a template is made of, but also altering it. This can be used for instance to check if a specific identifier is used, replace some filters by another one, or remove any expression that might not be authorized.
+
+### Visiting a template
+
+The `Fluid.Ast.AstVisitor` class can be used to create a custom visitor.
+
+Here is an example of a visitor class which records if an identifier is accessed anywhere in a template:
+
+```c#
+  public class IdentifierIsAccessedVisitor : AstVisitor
+  {
+      private readonly string _identifier;
+
+      public IdentifierIsAccessedVisitor(string identifier)
+      {
+          _identifier = identifier;
+      }
+
+      public bool IsAccessed { get; private set; }
+
+      public override IFluidTemplate VisitTemplate(IFluidTemplate template)
+      {
+          // Initialize the result each time a template is visited with the same visitor instance
+
+          IsAccessed = false;
+          return base.VisitTemplate(template);
+      }
+
+      protected override Expression VisitMemberExpression(MemberExpression memberExpression)
+      {
+          var firstSegment = memberExpression.Segments.FirstOrDefault() as IdentifierSegment;
+
+          if (firstSegment != null)
+          {
+              IsAccessed |= firstSegment.Identifier == _identifier;
+          }
+
+          return base.VisitMemberExpression(memberExpression);
+      }
+  }
+```
+
+And its usage:
+
+```c#
+var template = new FluidParser().Parse("{{ a.b | plus: 1}}");
+
+var visitor = new IdentifierIsAccessedVisitor("a");
+visitor.VisitTemplate(template);
+
+Console.WriteLine(visitor.IsAccessed); // writes True
+```
+
+### Rewriting a template
+
+The `Fluid.Ast.AstRewriter` class can be used to create a custom rewriter.
+
+Here is an example of a visitor class which replaces any `plus` filter with a `minus` one:
+
+```c#
+  public class ReplacePlusFiltersVisitor : AstRewriter
+  {
+      protected override Expression VisitFilterExpression(FilterExpression filterExpression)
+      {
+          if (filterExpression.Name == "plus")
+          {
+              return new FilterExpression(filterExpression.Input, "minus", filterExpression.Parameters);
+          }
+
+          return filterExpression;
+      }
+  }
+```
+
+And its usage:
+
+```c#
+
+var template = new FluidParser().Parse("{{ 1 | plus: 2 }}");
+
+var visitor = new ReplacePlusFiltersVisitor();
+var changed = visitor.VisitTemplate(template);
+
+var result = changed.Render();
+
+Console.WriteLine(result); // writes -1
+```
+
 ## Performance
 
 ### Caching
@@ -963,43 +1077,43 @@ Run it locally to analyze the time it takes to execute specific templates.
 #### Results
 
 Fluid is faster and allocates less memory than all other well-known .NET Liquid parsers.
-For parsing, Fluid is 60% faster than Scriban, allocating nearly 3 times less memory.
-For rendering, Fluid is slightly faster than Handlebars, 4 times faster than Scriban, but allocates at least half the memory.
-Compared to DotLiquid, Fluid renders 9 times faster, and allocates 35 times less memory.
+For parsing, Fluid is 19% faster than the second, Scriban, allocating nearly 3 times less memory.
+For rendering, Fluid is 26% faster than the second, Handlebars, 5 times faster than Scriban, but allocates half the memory.
+Compared to DotLiquid, Fluid renders 11 times faster, and allocates 35 times less memory.
 
 ``` text
-BenchmarkDotNet=v0.13.2, OS=Windows 11 (10.0.22621.819)
-Intel Core i7-1065G7 CPU 1.30GHz, 1 CPU, 8 logical and 4 physical cores
-.NET SDK=7.0.100
-  [Host]     : .NET 7.0.0 (7.0.22.51805), X64 RyuJIT AVX2
-  DefaultJob : .NET 7.0.0 (7.0.22.51805), X64 RyuJIT AVX2
+BenchmarkDotNet v0.13.12, Windows 11 (10.0.22631.3593/23H2/2023Update/SunValley3)
+12th Gen Intel Core i7-1260P, 1 CPU, 16 logical and 12 physical cores
+.NET SDK 9.0.100-preview.4.24209.11
+  [Host]     : .NET 8.0.5 (8.0.524.21615), X64 RyuJIT AVX2
+  DefaultJob : .NET 8.0.5 (8.0.524.21615), X64 RyuJIT AVX2
 
 
-|             Method |          Mean |         Error |        StdDev |        Median |  Ratio | RatioSD |      Gen0 |     Gen1 |    Gen2 |   Allocated | Alloc Ratio |
-|------------------- |--------------:|--------------:|--------------:|--------------:|-------:|--------:|----------:|---------:|--------:|------------:|------------:|
-|        Fluid_Parse |      5.956 us |     0.0932 us |     0.0872 us |      5.961 us |   1.00 |    0.00 |    0.6561 |        - |       - |     2.68 KB |        1.00 |
-|      Scriban_Parse |      9.179 us |     0.3109 us |     0.8919 us |      9.333 us |   1.29 |    0.04 |    1.7242 |        - |       - |     7.07 KB |        2.64 |
-|    DotLiquid_Parse |     14.230 us |     0.2821 us |     0.5502 us |     14.117 us |   2.44 |    0.10 |    3.9673 |        - |       - |    16.21 KB |        6.05 |
-|    LiquidNet_Parse |     92.625 us |     1.8196 us |     2.4290 us |     92.299 us |  15.55 |    0.47 |   15.1367 |        - |       - |    62.08 KB |       23.17 |
-|   Handlebars_Parse |  4,396.658 us |    86.4525 us |   146.8029 us |  4,376.402 us | 738.89 |   29.11 |   39.0625 |   7.8125 |       - |   160.68 KB |       59.96 |
-|                    |               |               |               |               |        |         |           |          |         |             |             |
-|     Fluid_ParseBig |     39.423 us |     0.7568 us |     0.9841 us |     39.590 us |   1.00 |    0.00 |    2.8076 |        - |       - |    11.61 KB |        1.00 |
-|   Scriban_ParseBig |     52.415 us |     0.9024 us |     0.8441 us |     52.598 us |   1.32 |    0.04 |    7.8125 |        - |       - |       32 KB |        2.76 |
-| DotLiquid_ParseBig |     65.549 us |     2.2007 us |     6.1348 us |     63.689 us |   1.67 |    0.15 |   23.0713 |        - |       - |    94.37 KB |        8.13 |
-| LiquidNet_ParseBig | 34,256.609 us | 1,473.1558 us | 4,179.0978 us | 33,082.588 us | 941.47 |  106.43 | 6718.7500 | 406.2500 |       - | 28543.66 KB |    2,458.67 |
-|                    |               |               |               |               |        |         |           |          |         |             |             |
-|       Fluid_Render |    467.469 us |    24.3842 us |    67.9734 us |    442.731 us |   1.00 |    0.00 |   22.9492 |        - |       - |    95.87 KB |        1.00 |
-|     Scriban_Render |  1,530.949 us |    70.8292 us |   198.6128 us |  1,467.999 us |   3.33 |    0.60 |  103.5156 |  68.3594 | 68.3594 |   498.46 KB |        5.20 |
-|   DotLiquid_Render |  3,263.084 us |    64.9926 us |   126.7631 us |  3,226.557 us |   7.01 |    1.26 |  746.0938 | 175.7813 | 27.3438 |  3371.13 KB |       35.16 |
-|   LiquidNet_Render |  2,182.528 us |    76.8237 us |   220.4217 us |  2,130.184 us |   4.76 |    0.87 |  527.3438 | 492.1875 |       - |  3143.17 KB |       32.79 |
-|  Handlebars_Render |    470.900 us |     9.3233 us |    16.8118 us |    465.707 us |   1.02 |    0.19 |   46.8750 |  10.7422 |       - |   194.92 KB |        2.03 |
+| Method             | Mean          | Error       | StdDev      | Ratio  | RatioSD | Gen0      | Gen1     | Gen2    | Allocated   | Alloc Ratio |
+|------------------- |--------------:|------------:|------------:|-------:|--------:|----------:|---------:|--------:|------------:|------------:|
+| Fluid_Parse        |      2.849 us |   0.0191 us |   0.0159 us |   1.00 |    0.00 |    0.3052 |        - |       - |     2.81 KB |        1.00 |
+| Scriban_Parse      |      3.297 us |   0.0407 us |   0.0381 us |   1.16 |    0.01 |    0.7744 |   0.0267 |       - |     7.14 KB |        2.54 |
+| DotLiquid_Parse    |      6.558 us |   0.1118 us |   0.1046 us |   2.30 |    0.03 |    1.7624 |   0.0229 |       - |    16.21 KB |        5.76 |
+| LiquidNet_Parse    |     25.064 us |   0.1409 us |   0.1100 us |   8.80 |    0.07 |    6.7444 |   0.6104 |       - |    62.04 KB |       22.06 |
+| Handlebars_Parse   |  2,401.901 us |  41.1672 us |  38.5079 us | 843.36 |   15.09 |   15.6250 |   7.8125 |       - |   156.52 KB |       55.65 |
+|                    |               |             |             |        |         |           |          |         |             |             |
+| Fluid_ParseBig     |     16.257 us |   0.1450 us |   0.1357 us |   1.00 |    0.00 |    1.2512 |   0.0305 |       - |    11.64 KB |        1.00 |
+| Scriban_ParseBig   |     18.521 us |   0.1000 us |   0.0886 us |   1.14 |    0.01 |    3.4790 |   0.4883 |       - |    32.07 KB |        2.75 |
+| DotLiquid_ParseBig |     27.612 us |   0.4320 us |   0.4041 us |   1.70 |    0.03 |   10.2539 |   0.4883 |       - |    94.36 KB |        8.11 |
+| LiquidNet_ParseBig | 12,206.204 us | 188.5327 us | 176.3536 us | 750.86 |   12.96 | 3093.7500 |  15.6250 |       - | 28543.38 KB |    2,452.05 |
+|                    |               |             |             |        |         |           |          |         |             |             |
+| Fluid_Render       |    134.311 us |   1.5910 us |   1.4104 us |   1.00 |    0.00 |   10.2539 |   0.4883 |       - |    95.86 KB |        1.00 |
+| Scriban_Render     |    615.143 us |   5.4851 us |   4.5803 us |   4.58 |    0.06 |   68.3594 |  68.3594 | 68.3594 |   498.64 KB |        5.20 |
+| DotLiquid_Render   |  1,403.693 us |  27.4426 us |  40.2251 us |  10.63 |    0.27 |  351.5625 | 140.6250 | 23.4375 |  3368.09 KB |       35.13 |
+| LiquidNet_Render   |    825.819 us |   8.6639 us |   7.6803 us |   6.15 |    0.08 |  339.8438 | 160.1563 |       - |   3130.8 KB |       32.66 |
+| Handlebars_Render  |    238.959 us |   4.7119 us |  11.5585 us |   1.68 |    0.06 |   20.9961 |   3.4180 |       - |   194.92 KB |        2.03 |
 ```
 
-Tested on November 30, 2022 with
-- Scriban 5.5.0
-- DotLiquid 2.2.656
+Tested on May 28, 2024 with
+- Scriban 5.10.0
+- DotLiquid 2.2.692
 - Liquid.NET 0.10.0
-- Handlebars.Net 2.1.2
+- Handlebars.Net 2.1.6
 
 ##### Legend
 
@@ -1018,5 +1132,8 @@ Fluid is known to be used in the following projects:
 - [NSwag](https://github.com/RicoSuter/NSwag) Swagger/OpenAPI 2.0 and 3.0 toolchain for .NET
 - [Optimizely](https://world.optimizely.com/blogs/deane-barker/dates/2023/1/introducing-liquid-templating/) An enterprise .NET CMS
 - [Rock](https://github.com/SparkDevNetwork/Rock) Relationship Management System
+- [TemplateTo](https://templateto.com) Powerful Template Based Document Generation
+- [Weavo Liquid Loom](https://www.weavo.dev) A Liquid Template generator/editor + corresponding Azure Logic Apps Connector / Microsoft Power Automate Connector
+- [Semantic Kernel](https://github.com/microsoft/semantic-kernel) Integrate cutting-edge LLM technology quickly and easily into your apps
 
-_Please file an issue to be listed here._
+_Please create a pull-request to be listed here._

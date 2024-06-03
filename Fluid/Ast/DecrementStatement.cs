@@ -1,11 +1,9 @@
-﻿using System.IO;
+﻿using Fluid.Values;
 using System.Text.Encodings.Web;
-using System.Threading.Tasks;
-using Fluid.Values;
 
 namespace Fluid.Ast
 {
-    public class DecrementStatement : Statement
+    public sealed class DecrementStatement : Statement
     {
         public DecrementStatement(string identifier)
         {
@@ -25,8 +23,8 @@ namespace Fluid.Ast
             var prefixedIdentifier = IncrementStatement.Prefix + Identifier;
 
             var value = context.GetValue(prefixedIdentifier);
-            
-            if (value.IsNil()) 
+
+            if (value.IsNil())
             {
                 value = NumberValue.Zero;
             }
@@ -41,5 +39,7 @@ namespace Fluid.Ast
 
             return Completion.Normal;
         }
+
+        protected internal override Statement Accept(AstVisitor visitor) => visitor.VisitDecrementStatement(this);
     }
 }

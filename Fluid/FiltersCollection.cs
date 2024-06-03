@@ -1,9 +1,8 @@
 ﻿using System.Collections;
-using System.Collections.Generic;
 
 namespace Fluid
 {
-    public class FilterCollection : IEnumerable<KeyValuePair<string, FilterDelegate>>
+    public sealed class FilterCollection : IEnumerable<KeyValuePair<string, FilterDelegate>>
     {
         private Dictionary<string, FilterDelegate> _filters;
 
@@ -16,10 +15,6 @@ namespace Fluid
         }
 
         public int Count => _filters == null ? 0 : _filters.Count;
-
-#if NETSTANDARD2_1
-        public void EnsureCapacity(int capacity) => _filters.EnsureCapacity(capacity);
-#endif
 
         public void AddFilter(string name, FilterDelegate d)
         {

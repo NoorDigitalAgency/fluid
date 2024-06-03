@@ -1,12 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Text.Encodings.Web;
-using System.Threading.Tasks;
+﻿using System.Text.Encodings.Web;
 
 namespace Fluid.Ast
 {
-    public class CaseStatement : TagStatement
+    public sealed class CaseStatement : TagStatement
     {
         private readonly WhenStatement[] _whenStatements;
 
@@ -14,11 +10,11 @@ namespace Fluid.Ast
             Expression expression,
             ElseStatement elseStatement = null,
             WhenStatement[] whenStatements = null
-        ) : base(new List<Statement>())
+        ) : base([])
         {
             Expression = expression;
             Else = elseStatement;
-            _whenStatements = whenStatements ?? Array.Empty<WhenStatement>();
+            _whenStatements = whenStatements ?? [];
         }
 
         public Expression Expression { get; }
@@ -54,5 +50,7 @@ namespace Fluid.Ast
 
             return Completion.Normal;
         }
+
+        protected internal override Statement Accept(AstVisitor visitor) => visitor.VisitCaseStatement(this);
     }
 }

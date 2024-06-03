@@ -1,11 +1,10 @@
 ﻿using Fluid.Values;
 using System.Diagnostics;
-using System.Threading.Tasks;
 
 namespace Fluid.Ast
 {
     [DebuggerDisplay("{Identifier,nq}")]
-    public class IdentifierSegment : MemberSegment
+    public sealed class IdentifierSegment : MemberSegment
     {
         public IdentifierSegment(string identifier)
         {

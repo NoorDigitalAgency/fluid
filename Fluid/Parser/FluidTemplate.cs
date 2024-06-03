@@ -1,27 +1,21 @@
 ﻿using Fluid.Ast;
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Text.Encodings.Web;
-using System.Threading.Tasks;
 
 namespace Fluid.Parser
 {
-    public class FluidTemplate : IFluidTemplate
+    public sealed class FluidTemplate : IFluidTemplate, IStatementList
     {
-        private readonly List<Statement> _statements;
-
         public FluidTemplate(params Statement[] statements)
         {
-            _statements = new List<Statement>(statements ?? Array.Empty<Statement>());
+            Statements = statements ?? [];
         }
 
-        public FluidTemplate(List<Statement> statements)
+        public FluidTemplate(IReadOnlyList<Statement> statements)
         {
-            _statements = statements ?? throw new ArgumentNullException(nameof(statements));
+            Statements = statements ?? throw new ArgumentNullException(nameof(statements));
         }
 
-        public IReadOnlyList<Statement> Statements => _statements;
+        public IReadOnlyList<Statement> Statements { get; }
 
         public ValueTask RenderAsync(TextWriter writer, TextEncoder encoder, TemplateContext context)
         {

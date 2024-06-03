@@ -1,14 +1,10 @@
 ﻿using Fluid.Values;
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Net;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using TimeZoneConverter;
 
 namespace Fluid.Filters
@@ -75,7 +71,7 @@ namespace Fluid.Filters
 
                     continue;
                 }
-                
+
                 if (IsCapitalLetter(lookAheadChar))
                 {
                     if (IsCapitalLetter(currentChar))
@@ -380,47 +376,48 @@ namespace Fluid.Filters
                                 string AbbreviatedDayName() => context.CultureInfo.DateTimeFormat.AbbreviatedDayNames[(int)value.DayOfWeek];
 
                                 var abbreviatedDayName = AbbreviatedDayName();
-                                result.Append(upperCaseFlag ? abbreviatedDayName.ToUpper() : abbreviatedDayName);
+                                result.Append(upperCaseFlag ? abbreviatedDayName.ToUpperInvariant() : abbreviatedDayName);
                                 break;
                             case 'A':
                                 {
                                     var dayName = context.CultureInfo.DateTimeFormat.DayNames[(int)value.DayOfWeek];
-                                    result.Append(upperCaseFlag ? dayName.ToUpper() : dayName);
+                                    result.Append(upperCaseFlag ? dayName.ToUpperInvariant() : dayName);
                                     break;
                                 }
                             case 'b':
                                 var abbreviatedMonthName = context.CultureInfo.DateTimeFormat.AbbreviatedMonthNames[value.Month - 1];
-                                result.Append(upperCaseFlag ? abbreviatedMonthName.ToUpper() : abbreviatedMonthName);
+                                result.Append(upperCaseFlag ? abbreviatedMonthName.ToUpperInvariant() : abbreviatedMonthName);
                                 break;
                             case 'B':
                                 {
                                     var monthName = context.CultureInfo.DateTimeFormat.MonthNames[value.Month - 1];
-                                    result.Append(upperCaseFlag ? monthName.ToUpper() : monthName);
+                                    result.Append(upperCaseFlag ? monthName.ToUpperInvariant() : monthName);
                                     break;
                                 }
                             case 'c':
                                 {
                                     // c is defined as "%a %b %e %T %Y" but it's also supposed to be locale aware, so we are using the 
                                     // C# standard format instead
-                                    result.Append(upperCaseFlag ? value.ToString("F", context.CultureInfo).ToUpper() : value.ToString("F", context.CultureInfo));
+                                    result.Append(upperCaseFlag ? value.ToString("F", context.CultureInfo).ToUpperInvariant() : value.ToString("F", context.CultureInfo));
                                     break;
                                 }
                             case 'C': result.Append(Format(value.Year / 100, 2)); break;
-                            case 'd': result.Append(Format(value.Day, 2)); break; 
+                            case 'd': result.Append(Format(value.Day, 2)); break;
                             case 'D':
                                 {
                                     var sb = new StringBuilder();
                                     ForStrf(value, "%m/%d/%y", sb);
-                                    result.Append(upperCaseFlag ? sb.ToString().ToUpper() : sb.ToString());
+                                    result.Append(upperCaseFlag ? sb.ToString().ToUpperInvariant() : sb.ToString());
                                     break;
                                 }
-                            case 'e': useSpaceForPaddingFlag = true; result.Append(Format(value.Day, 2));
+                            case 'e':
+                                useSpaceForPaddingFlag = true; result.Append(Format(value.Day, 2));
                                 break;
                             case 'F':
                                 {
                                     var sb = new StringBuilder();
                                     ForStrf(value, "%Y-%m-%d", sb);
-                                    result.Append(upperCaseFlag ? sb.ToString().ToUpper() : sb.ToString());
+                                    result.Append(upperCaseFlag ? sb.ToString().ToUpperInvariant() : sb.ToString());
                                     break;
                                 }
                             case 'g':
@@ -479,22 +476,22 @@ namespace Fluid.Filters
                             case 'N':
                                 width ??= 9;
                                 var v = (value.Ticks % 10000000).ToString(context.CultureInfo);
-                                result.Append(v.Length >= width ? v.Substring(0, width.Value) : v.PadRight(width.Value, '0')); 
+                                result.Append(v.Length >= width ? v.Substring(0, width.Value) : v.PadRight(width.Value, '0'));
                                 break;
-                            case 'p': result.Append(value.ToString("tt", context.CultureInfo).ToUpper()); break;
-                            case 'P': result.Append(value.ToString("tt", context.CultureInfo).ToLower()); break;
+                            case 'p': result.Append(value.ToString("tt", context.CultureInfo).ToUpperInvariant()); break;
+                            case 'P': result.Append(value.ToString("tt", context.CultureInfo).ToLowerInvariant()); break;
                             case 'r':
                                 {
                                     var sb = new StringBuilder();
                                     ForStrf(value, "%I:%M:%S %p", sb);
-                                    result.Append(upperCaseFlag ? sb.ToString().ToUpper() : sb.ToString());
+                                    result.Append(upperCaseFlag ? sb.ToString().ToUpperInvariant() : sb.ToString());
                                     break;
                                 }
                             case 'R':
                                 {
                                     var sb = new StringBuilder();
                                     ForStrf(value, "%H:%M", sb);
-                                    result.Append(upperCaseFlag ? sb.ToString().ToUpper() : sb.ToString());
+                                    result.Append(upperCaseFlag ? sb.ToString().ToUpperInvariant() : sb.ToString());
                                     break;
                                 }
                             case 's': result.Append(Format(value.ToUnixTimeSeconds())); break;
@@ -506,7 +503,7 @@ namespace Fluid.Filters
                                 {
                                     var sb = new StringBuilder();
                                     ForStrf(value, "%H:%M:%S", sb);
-                                    result.Append(upperCaseFlag ? sb.ToString().ToUpper() : sb.ToString());
+                                    result.Append(upperCaseFlag ? sb.ToString().ToUpperInvariant() : sb.ToString());
                                     break;
                                 }
                             case 'u': result.Append(value.DayOfWeek switch { DayOfWeek.Sunday => 7, _ => (int)value.DayOfWeek }); break;
@@ -524,7 +521,7 @@ namespace Fluid.Filters
                                 {
                                     var sb = new StringBuilder();
                                     ForStrf(value, "%e-%b-%Y", sb);
-                                    result.Append(upperCaseFlag ? sb.ToString().ToUpper() : sb.ToString());
+                                    result.Append(upperCaseFlag ? sb.ToString().ToUpperInvariant() : sb.ToString());
                                     break;
                                 }
                             case 'V': result.Append(Format(value.DayOfYear / 7 + 1, 2)); break;
@@ -536,7 +533,7 @@ namespace Fluid.Filters
                                     {
                                         week = 0;
                                     }
-                                    result.Append(Format(week, 2)); 
+                                    result.Append(Format(week, 2));
                                     break;
                                 }
                             case 'x':
@@ -544,7 +541,7 @@ namespace Fluid.Filters
                                     // x is defined as "%m/%d/%y" but it's also supposed to be locale aware, so we are using the 
                                     // C# short date pattern standard format instead
 
-                                    result.Append(upperCaseFlag ? value.ToString("d", context.CultureInfo).ToUpper() : value.ToString("d", context.CultureInfo));
+                                    result.Append(upperCaseFlag ? value.ToString("d", context.CultureInfo).ToUpperInvariant() : value.ToString("d", context.CultureInfo));
                                     break;
                                 }
                             case 'X':
@@ -552,7 +549,7 @@ namespace Fluid.Filters
                                     // X is defined as "%T" but it's also supposed to be locale aware, so we are using the 
                                     // C# short time pattern standard format instead
 
-                                    result.Append(upperCaseFlag ? value.ToString("t", context.CultureInfo).ToUpper() : value.ToString("t", context.CultureInfo));
+                                    result.Append(upperCaseFlag ? value.ToString("t", context.CultureInfo).ToUpperInvariant() : value.ToString("t", context.CultureInfo));
                                     break;
                                 }
                             case 'y':
@@ -575,7 +572,7 @@ namespace Fluid.Filters
                                 {
                                     var sb = new StringBuilder();
                                     ForStrf(value, "%a %b %e %H:%M:%S %Z %Y", sb);
-                                    result.Append(upperCaseFlag ? sb.ToString().ToUpper() : sb.ToString());
+                                    result.Append(upperCaseFlag ? sb.ToString().ToUpperInvariant() : sb.ToString());
                                     break;
                                 }
                             default: result.Append('%').Append(c); break;
@@ -686,7 +683,9 @@ namespace Fluid.Filters
                         foreach (var property in properties)
                         {
                             var name = conv(property);
+#pragma warning disable CA1859 // Change type of variable 'fluidValue' from 'Fluid.Values.FluidValue' to 'Fluid.Values.StringValue' for improved performance
                             var fluidValue = await input.GetValueAsync(name, ctx);
+#pragma warning restore CA1859
                             if (fluidValue.IsNil())
                             {
                                 continue;
@@ -804,61 +803,65 @@ namespace Fluid.Filters
         public static ValueTask<FluidValue> MD5(FluidValue input, FilterArguments arguments, TemplateContext context)
         {
             var value = input.ToStringValue();
-            if (String.IsNullOrEmpty(value))
+            if (string.IsNullOrEmpty(value))
             {
                 return StringValue.Empty;
             }
 
-            using (var provider = System.Security.Cryptography.MD5.Create())
+#pragma warning disable CA5351 // Do Not Use Broken Cryptographic Algorithms
+            using var provider = System.Security.Cryptography.MD5.Create();
+#pragma warning restore CA5351
+            var builder = new StringBuilder(32);
+#pragma warning disable CA1850 // Prefer static 'System.Security.Cryptography.MD5.HashData' method over 'ComputeHash'
+            foreach (byte b in provider.ComputeHash(Encoding.UTF8.GetBytes(value)))
+#pragma warning restore CA1850
             {
-                var builder = new StringBuilder(32);
-                foreach (byte b in provider.ComputeHash(Encoding.UTF8.GetBytes(value)))
-                {
-                    builder.Append(b.ToString("x2").ToLower());
-                }
-
-                return new StringValue(builder.ToString());
+                builder.Append(b.ToString("x2").ToLowerInvariant());
             }
+
+            return new StringValue(builder.ToString());
         }
 
         public static ValueTask<FluidValue> Sha1(FluidValue input, FilterArguments arguments, TemplateContext context)
         {
             var value = input.ToStringValue();
-            if (String.IsNullOrEmpty(value))
+            if (string.IsNullOrEmpty(value))
             {
                 return StringValue.Empty;
             }
 
-            using (var provider = System.Security.Cryptography.SHA1.Create())
+#pragma warning disable CA5350 // Do Not Use Weak Cryptographic Algorithms
+            using var provider = System.Security.Cryptography.SHA1.Create();
+#pragma warning restore CA5350
+            var builder = new StringBuilder(40);
+#pragma warning disable CA1850 // Prefer static 'System.Security.Cryptography.MD5.HashData' method over 'ComputeHash'
+            foreach (byte b in provider.ComputeHash(Encoding.UTF8.GetBytes(value)))
+#pragma warning restore CA1850
             {
-                var builder = new StringBuilder(40);
-                foreach (byte b in provider.ComputeHash(Encoding.UTF8.GetBytes(value)))
-                {
-                    builder.Append(b.ToString("x2").ToLower());
-                }
-
-                return new StringValue(builder.ToString());
+                builder.Append(b.ToString("x2").ToLowerInvariant());
             }
+
+            return new StringValue(builder.ToString());
         }
 
         public static ValueTask<FluidValue> Sha256(FluidValue input, FilterArguments arguments, TemplateContext context)
         {
             var value = input.ToStringValue();
-            if (String.IsNullOrEmpty(value))
+            if (string.IsNullOrEmpty(value))
             {
                 return StringValue.Empty;
             }
 
-            using (var provider = System.Security.Cryptography.SHA256.Create())
+            using var provider = System.Security.Cryptography.SHA256.Create();
+            var builder = new StringBuilder(64);
+#pragma warning disable CA1850 // Prefer static 'System.Security.Cryptography.MD5.HashData' method over 'ComputeHash'
+            foreach (byte b in provider.ComputeHash(Encoding.UTF8.GetBytes(value)))
+#pragma warning restore CA1850
             {
-                var builder = new StringBuilder(64);
-                foreach (byte b in provider.ComputeHash(Encoding.UTF8.GetBytes(value)))
-                {
-                    builder.Append(b.ToString("x2").ToLower());
-                }
-
-                return new StringValue(builder.ToString());
+                builder.Append(b.ToString("x2").ToLowerInvariant());
             }
+
+            return new StringValue(builder.ToString());
         }
     }
 }

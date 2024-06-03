@@ -1,21 +1,19 @@
-﻿using System.Collections.Generic;
-using System.Threading.Tasks;
-using Fluid.Values;
+﻿using Fluid.Values;
 
 namespace Fluid.Ast
 {
-    public class FilterExpression : Expression
+    public sealed class FilterExpression : Expression
     {
-        public FilterExpression(Expression input, string name, List<FilterArgument> parameters)
+        public FilterExpression(Expression input, string name, IReadOnlyList<FilterArgument> parameters)
         {
             Input = input;
             Name = name;
-            Parameters = parameters ?? new List<FilterArgument>();
+            Parameters = parameters ?? [];
         }
 
         public Expression Input { get; }
         public string Name { get; }
-        public List<FilterArgument> Parameters { get; }
+        public IReadOnlyList<FilterArgument> Parameters { get; }
 
         private volatile bool _canBeCached = true;
         private volatile FilterArguments _cachedArguments;
@@ -48,7 +46,7 @@ namespace Fluid.Ast
 
             var input = await Input.EvaluateAsync(context);
 
-            if (!context.Options.Filters.TryGetValue(Name, out FilterDelegate filter))
+            if (!context.Options.Filters.TryGetValue(Name, out var filter))
             {
                 // When a filter is not defined, return the input
                 return input;
@@ -56,5 +54,7 @@ namespace Fluid.Ast
 
             return await filter(input, arguments, context);
         }
+
+        protected internal override Expression Accept(AstVisitor visitor) => visitor.VisitFilterExpression(this);
     }
 }

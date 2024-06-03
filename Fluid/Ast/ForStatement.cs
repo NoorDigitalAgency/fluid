@@ -1,20 +1,14 @@
 ﻿using Fluid.Values;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Text.Encodings.Web;
-using System.Threading.Tasks;
 
 namespace Fluid.Ast
 {
-    public class ForStatement : TagStatement
+    public sealed class ForStatement : TagStatement
     {
-        private bool _isContinueOffset;
-        private string _continueOffsetLiteral;
+        private readonly string _continueOffsetLiteral;
 
         public ForStatement(
-            List<Statement> statements,
+            IReadOnlyList<Statement> statements,
             string identifier,
             Expression source,
             Expression limit,
@@ -30,7 +24,7 @@ namespace Fluid.Ast
             Reversed = reversed;
             Else = elseStatement;
 
-            _isContinueOffset = Offset is MemberExpression l && l.Segments.Count == 1 && ((IdentifierSegment)l.Segments[0]).Identifier == "continue";
+            OffsetIsContinue = Offset is MemberExpression l && l.Segments.Count == 1 && ((IdentifierSegment)l.Segments[0]).Identifier == "continue";
             _continueOffsetLiteral = source is MemberExpression m ? "for_continue_" + ((IdentifierSegment)m.Segments[0]).Identifier : null;
         }
 
@@ -40,7 +34,8 @@ namespace Fluid.Ast
         public Expression Limit { get; }
         public Expression Offset { get; }
         public bool Reversed { get; }
-        public Statement Else { get; }
+        public ElseStatement Else { get; }
+        public bool OffsetIsContinue { get; }
 
         public override async ValueTask<Completion> WriteToAsync(TextWriter writer, TextEncoder encoder, TemplateContext context)
         {
@@ -60,9 +55,9 @@ namespace Fluid.Ast
             var startIndex = 0;
             if (Offset is not null)
             {
-                if (_isContinueOffset)
+                if (OffsetIsContinue)
                 {
-                    startIndex = (int) context.GetValue(_continueOffsetLiteral).ToNumberValue();
+                    startIndex = (int)context.GetValue(_continueOffsetLiteral).ToNumberValue();
                 }
                 else
                 {
@@ -75,7 +70,7 @@ namespace Fluid.Ast
 
             if (Limit is not null)
             {
-                var limit = (int) (await Limit.EvaluateAsync(context)).ToNumberValue();
+                var limit = (int)(await Limit.EvaluateAsync(context)).ToNumberValue();
 
                 // Limit can be negative
                 if (limit >= 0)
@@ -141,11 +136,11 @@ namespace Fluid.Ast
                         context.SetValue(_continueOffsetLiteral, forloop.Index);
                     }
 
-                    Completion completion = Completion.Normal;
+                    var completion = Completion.Normal;
 
-                    for (var index = 0; index < _statements.Count; index++)
+                    for (var index = 0; index < Statements.Count; index++)
                     {
-                        var statement = _statements[index];
+                        var statement = Statements[index];
                         completion = await statement.WriteToAsync(writer, encoder, context);
 
                         //// Restore the forloop property after every statement in case it replaced it,
@@ -179,5 +174,7 @@ namespace Fluid.Ast
 
             return Completion.Normal;
         }
+
+        protected internal override Statement Accept(AstVisitor visitor) => visitor.VisitForStatement(this);
     }
 }

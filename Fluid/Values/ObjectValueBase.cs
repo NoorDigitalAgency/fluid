@@ -1,9 +1,7 @@
-﻿using System;
+﻿using Fluid.Utils;
 using System.Collections;
 using System.Globalization;
-using System.IO;
 using System.Text.Encodings.Web;
-using System.Threading.Tasks;
 
 namespace Fluid.Values
 {
@@ -12,7 +10,7 @@ namespace Fluid.Values
     /// </summary>
     public abstract class ObjectValueBase : FluidValue
     {
-        protected static readonly char[] MemberSeparators = new [] { '.' };
+        protected static readonly char[] MemberSeparators = ['.'];
 
         protected bool? _isModelType;
 
@@ -56,7 +54,7 @@ namespace Fluid.Values
                 accessor = MemberAccessStrategyExtensions.GetNamedAccessor(Value.GetType(), name, context.Options.MemberAccessStrategy.MemberNameStrategy);
             }
 
-            if (name.IndexOf(".", StringComparison.OrdinalIgnoreCase) != -1)
+            if (name.Contains('.'))
             {
                 // Try to access the property with dots inside
                 if (accessor != null)
@@ -107,7 +105,7 @@ namespace Fluid.Values
         {
             var members = name.Split(MemberSeparators);
 
-            object target = Value;
+            var target = Value;
 
             foreach (var prop in members)
             {
@@ -151,16 +149,30 @@ namespace Fluid.Values
             return Convert.ToDecimal(Value);
         }
 
+        [Obsolete("WriteTo is obsolete, prefer the WriteToAsync method.")]
         public override void WriteTo(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
         {
             AssertWriteToParameters(writer, encoder, cultureInfo);
             writer.Write(encoder.Encode(ToStringValue()));
         }
 
-        public override async ValueTask WriteToAsync(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
+        public override ValueTask WriteToAsync(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
         {
             AssertWriteToParameters(writer, encoder, cultureInfo);
-            await writer.WriteAsync(encoder.Encode(ToStringValue()));
+            var task = writer.WriteAsync(encoder.Encode(ToStringValue()));
+
+            if (task.IsCompletedSuccessfully())
+            {
+                return default;
+            }
+
+            return Awaited(task);
+
+            static async ValueTask Awaited(Task t)
+            {
+                await t;
+                return;
+            }
         }
 
         public override string ToStringValue()
@@ -173,10 +185,10 @@ namespace Fluid.Values
             return Value;
         }
 
-        public override bool Equals(object other)
+        public override bool Equals(object obj)
         {
             // The is operator will return false if null
-            if (other is ObjectValueBase otherValue)
+            if (obj is ObjectValueBase otherValue)
             {
                 return Value.Equals(otherValue.Value);
             }

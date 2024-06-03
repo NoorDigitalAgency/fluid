@@ -1,25 +1,20 @@
-﻿using System.Collections.Generic;
-using System.IO;
-using System.Text.Encodings.Web;
-using System.Threading.Tasks;
+﻿using System.Text.Encodings.Web;
 
 namespace Fluid.Parser
 {
-    public class CompositeFluidTemplate : IFluidTemplate
+    public sealed class CompositeFluidTemplate : IFluidTemplate
     {
-        private readonly List<IFluidTemplate> _templates;
-
         public CompositeFluidTemplate(params IFluidTemplate[] templates)
         {
-            _templates = new List<IFluidTemplate>(templates);
+            Templates = new List<IFluidTemplate>(templates);
         }
 
-        public CompositeFluidTemplate(IEnumerable<IFluidTemplate> templates)
+        public CompositeFluidTemplate(IReadOnlyList<IFluidTemplate> templates)
         {
-            _templates = new List<IFluidTemplate>(templates);
+            Templates = new List<IFluidTemplate>(templates);
         }
 
-        public IReadOnlyList<IFluidTemplate> Templates => _templates;
+        public IReadOnlyList<IFluidTemplate> Templates { get; }
 
         public async ValueTask RenderAsync(TextWriter writer, TextEncoder encoder, TemplateContext context)
         {

@@ -1,23 +1,25 @@
-﻿using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Fluid.Values;
+﻿using Fluid.Values;
 
 namespace Fluid.Ast
 {
-    public class MemberExpression : Expression
+    public sealed class MemberExpression : Expression
     {
-        public MemberExpression(params MemberSegment[] segments)
+        public MemberExpression(MemberSegment segment)
         {
-            Segments = segments.ToList();
+            Segments = [segment];
         }
 
-        public MemberExpression(List<MemberSegment> segments)
+        public MemberExpression(IReadOnlyList<MemberSegment> segments)
         {
-            Segments = segments;
+            Segments = segments ?? [];
+
+            if (Segments.Count == 0)
+            {
+                throw new ArgumentException("At least one segment is required in a MemberExpression");
+            }
         }
 
-        public List<MemberSegment> Segments { get; }
+        public IReadOnlyList<MemberSegment> Segments { get; }
 
         public override ValueTask<FluidValue> EvaluateAsync(TemplateContext context)
         {
@@ -27,11 +29,11 @@ namespace Fluid.Ast
 
             // Search the initial segment in the local scope first
 
-            FluidValue value = context.LocalScope.GetValue(initial.Identifier);
+            var value = context.LocalScope.GetValue(initial.Identifier);
 
             // If it was not successful, try again with a member of the model
 
-            int start = 1;
+            var start = 1;
 
             if (value.IsNil())
             {
@@ -69,7 +71,7 @@ namespace Fluid.Ast
         private static async ValueTask<FluidValue> Awaited(
             ValueTask<FluidValue> task,
             TemplateContext context,
-            List<MemberSegment> segments,
+            IReadOnlyList<MemberSegment> segments,
             int startIndex)
         {
             var value = await task;
@@ -87,5 +89,7 @@ namespace Fluid.Ast
 
             return value;
         }
+
+        protected internal override Expression Accept(AstVisitor visitor) => visitor.VisitMemberExpression(this);
     }
 }

@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Fluid.Values;
+﻿using Fluid.Values;
 
 namespace Fluid.Filters
 {
@@ -21,6 +17,7 @@ namespace Fluid.Filters
             filters.AddFilter("sort_natural", SortNatural);
             filters.AddFilter("uniq", Uniq);
             filters.AddFilter("where", Where);
+            filters.AddFilter("sum", Sum);
             return filters;
         }
 
@@ -55,7 +52,7 @@ namespace Fluid.Filters
             {
                 return input;
             }
-            
+
             var concat = new List<FluidValue>();
 
             if (input.Type == FluidValues.Array)
@@ -96,7 +93,7 @@ namespace Fluid.Filters
 
             var list = new List<FluidValue>();
 
-            foreach(var item in input.Enumerate(context))
+            foreach (var item in input.Enumerate(context))
             {
                 list.Add(await item.GetValueAsync(member, context));
             }
@@ -108,7 +105,7 @@ namespace Fluid.Filters
         {
             if (input.Type == FluidValues.Array)
             {
-                return new ArrayValue(input.Enumerate(context).Reverse());
+                return new ArrayValue(input.Enumerate(context).Reverse().ToArray());
             }
             else if (input.Type == FluidValues.String)
             {
@@ -120,10 +117,10 @@ namespace Fluid.Filters
                 else
                 {
                     var valueAsArray = value.ToCharArray();
-                    
+
                     Array.Reverse(valueAsArray);
 
-                    return new ArrayValue(valueAsArray.Select(e => new StringValue(e.ToString())));
+                    return new ArrayValue(valueAsArray.Select(e => new StringValue(e.ToString())).ToArray());
                 }
             }
             else
@@ -214,13 +211,50 @@ namespace Fluid.Filters
             }
             else
             {
-                return new ArrayValue(input.Enumerate(context).OrderBy(x => x.ToStringValue(), StringComparer.OrdinalIgnoreCase));
+                return new ArrayValue(input.Enumerate(context).OrderBy(x => x.ToStringValue(), StringComparer.OrdinalIgnoreCase).ToArray());
             }
         }
 
         public static ValueTask<FluidValue> Uniq(FluidValue input, FilterArguments arguments, TemplateContext context)
         {
             return new ArrayValue(input.Enumerate(context).Distinct().ToArray());
+        }
+
+        public static async ValueTask<FluidValue> Sum(FluidValue input, FilterArguments arguments, TemplateContext context)
+        {
+            if (arguments.Count == 0)
+            {
+                var numbers = input.Enumerate(context).Select(x => x switch
+                {
+                    ArrayValue => Sum(x, arguments, context).Result.ToNumberValue(),
+                    NumberValue or StringValue => x.ToNumberValue(),
+                    _ => 0
+                });
+
+                return NumberValue.Create(numbers.Sum());
+            }
+
+            var member = arguments.At(0);
+
+            var sumList = new List<decimal>();
+
+            foreach (var item in input.Enumerate(context))
+            {
+                switch (item)
+                {
+                    case ArrayValue:
+                        sumList.Add(Sum(item, arguments, context).Result.ToNumberValue());
+                        break;
+                    case ObjectValue:
+                        {
+                            var value = await item.GetValueAsync(member.ToStringValue(), context);
+                            sumList.Add(value.ToNumberValue());
+                            break;
+                        }
+                }
+            }
+
+            return NumberValue.Create(sumList.Sum());
         }
     }
 }

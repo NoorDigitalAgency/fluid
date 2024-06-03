@@ -1,23 +1,20 @@
-﻿using System.Collections.Generic;
-using System.IO;
-using System.Text.Encodings.Web;
-using System.Threading.Tasks;
+﻿using System.Text.Encodings.Web;
 
 namespace Fluid.Ast
 {
-    public class ElseStatement : TagStatement
+    public sealed class ElseStatement : TagStatement
     {
-        public ElseStatement(List<Statement> statements) : base(statements)
+        public ElseStatement(IReadOnlyList<Statement> statements) : base(statements)
         {
         }
 
         public override ValueTask<Completion> WriteToAsync(TextWriter writer, TextEncoder encoder, TemplateContext context)
         {
-            for (var i = 0; i < _statements.Count; i++)
+            for (var i = 0; i < Statements.Count; i++)
             {
                 context.IncrementSteps();
 
-                var task = _statements[i].WriteToAsync(writer, encoder, context);
+                var task = Statements[i].WriteToAsync(writer, encoder, context);
 
                 if (!task.IsCompletedSuccessfully)
                 {
@@ -53,11 +50,11 @@ namespace Fluid.Ast
                 return completion;
             }
 
-            for (var i = startIndex; i < _statements.Count; i++)
+            for (var i = startIndex; i < Statements.Count; i++)
             {
                 context.IncrementSteps();
 
-                completion = await _statements[i].WriteToAsync(writer, encoder, context);
+                completion = await Statements[i].WriteToAsync(writer, encoder, context);
 
                 if (completion != Completion.Normal)
                 {
@@ -69,5 +66,7 @@ namespace Fluid.Ast
 
             return Completion.Normal;
         }
+
+        protected internal override Statement Accept(AstVisitor visitor) => visitor.VisitElseStatement(this);
     }
 }

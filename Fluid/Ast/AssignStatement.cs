@@ -1,11 +1,9 @@
-﻿using System.IO;
-using System.Text.Encodings.Web;
-using System.Threading.Tasks;
+﻿using System.Text.Encodings.Web;
 using Fluid.Values;
 
 namespace Fluid.Ast
 {
-    public class AssignStatement : Statement
+    public sealed class AssignStatement : Statement
     {
         public AssignStatement(string identifier, Expression value)
         {
@@ -37,5 +35,7 @@ namespace Fluid.Ast
             context.SetValue(Identifier, task.Result);
             return new ValueTask<Completion>(Completion.Normal);
         }
+
+        protected internal override Statement Accept(AstVisitor visitor) => visitor.VisitAssignStatement(this);
     }
 }
