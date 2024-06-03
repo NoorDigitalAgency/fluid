@@ -1,4 +1,5 @@
-﻿using Fluid.ViewEngine;
+﻿using Fluid.Parser;
+using Fluid.ViewEngine;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -14,10 +15,11 @@ namespace Fluid.MvcViewEngine
     /// </summary>
     public class FluidRendering
     {
-        private readonly FluidViewRenderer _fluidViewRenderer;
+        private readonly IFluidViewRenderer _fluidViewRenderer;
 
         public FluidRendering(
             IOptions<FluidMvcViewOptions> optionsAccessor,
+            IFluidViewRenderer fluidViewRenderer,
             IWebHostEnvironment hostingEnvironment)
         {
             _hostingEnvironment = hostingEnvironment;
@@ -27,7 +29,7 @@ namespace Fluid.MvcViewEngine
             _options.TemplateOptions.MemberAccessStrategy.Register<ModelStateDictionary>();
             _options.TemplateOptions.FileProvider = _options.PartialsFileProvider ?? _hostingEnvironment.ContentRootFileProvider;
 
-            _fluidViewRenderer = new FluidViewRenderer(_options);
+            _fluidViewRenderer = fluidViewRenderer;
 
             _options.ViewsFileProvider ??= _hostingEnvironment.ContentRootFileProvider;
         }
@@ -48,6 +50,36 @@ namespace Fluid.MvcViewEngine
             }
 
             await _fluidViewRenderer.RenderViewAsync(writer, path, context);
+        }
+
+        public async Task RenderTemplateAsync(TextWriter writer, string templateString, ViewContext viewContext)
+        {
+            var context = new TemplateContext(_options.TemplateOptions);
+            context.SetValue("ViewData", viewContext.ViewData);
+            context.SetValue("ModelState", viewContext.ModelState);
+            context.SetValue("Model", viewContext.ViewData.Model);
+
+            if (_options.RenderingViewAsync != null)
+            {
+                await _options.RenderingTemplateStringAsync.Invoke(templateString, viewContext, context);
+            }
+
+            await _fluidViewRenderer.RenderTemplateAsync(writer, templateString, context);
+        }
+
+        public async Task RenderTemplateAsync(TextWriter writer, FluidTemplate template, ViewContext viewContext)
+        {
+            var context = new TemplateContext(_options.TemplateOptions);
+            context.SetValue("ViewData", viewContext.ViewData);
+            context.SetValue("ModelState", viewContext.ModelState);
+            context.SetValue("Model", viewContext.ViewData.Model);
+
+            if (_options.RenderingViewAsync != null)
+            {
+                await _options.RenderingTemplateAsync.Invoke(template, viewContext, context);
+            }
+
+            await _fluidViewRenderer.RenderTemplateAsync(writer, template, context);
         }
     }
 }

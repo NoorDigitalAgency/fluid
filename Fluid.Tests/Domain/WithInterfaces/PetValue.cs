@@ -48,6 +48,11 @@ namespace Fluid.Tests.Domain.WithInterfaces
         {
             throw new NotImplementedException();
         }
+        
+        public override ValueTask WriteToAsync(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
+        {
+            throw new NotImplementedException();
+        }
 
         public override ValueTask WriteToAsync(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
         {

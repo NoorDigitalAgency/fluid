@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using System.Text.Encodings.Web;
+using System.Threading.Tasks;
 
 namespace Fluid.Values
 {
