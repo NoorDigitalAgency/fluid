@@ -5,6 +5,7 @@
     <LangVersion>latest</LangVersion>
     <IsPackable>true</IsPackable>
     <PackageIcon>logo_64x64.png</PackageIcon>
+	  <PackageId>NoorFluid.ViewEngine</PackageId>
   </PropertyGroup>
 
   <ItemGroup>

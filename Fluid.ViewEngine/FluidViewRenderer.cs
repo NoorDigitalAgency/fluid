@@ -25,7 +25,10 @@ namespace Fluid.ViewEngine
         }
 
         private readonly ConcurrentDictionary<IFileProvider, CacheEntry> _cache = new();
+        private readonly ConcurrentDictionary<string, string> _partialToPartialPathCache = new();
         private readonly ConcurrentDictionary<LayoutKey, string> _layoutsCache = new();
+
+        private readonly FluidViewEngineOptions _fluidViewEngineOptions;
 
         public FluidViewRenderer(FluidViewEngineOptions fluidViewEngineOptions)
         {
@@ -33,8 +36,6 @@ namespace Fluid.ViewEngine
 
             _fluidViewEngineOptions.TemplateOptions.FileProvider = _fluidViewEngineOptions.PartialsFileProvider ?? _fluidViewEngineOptions.ViewsFileProvider ?? new NullFileProvider();
         }
-
-        private readonly FluidViewEngineOptions _fluidViewEngineOptions;
 
         public virtual async Task RenderViewAsync(TextWriter writer, string relativePath, TemplateContext context)
         {
@@ -75,9 +76,56 @@ namespace Fluid.ViewEngine
                 await writer.WriteAsync(body);
             }
         }
+        
+        public virtual async Task RenderTemplateAsync(TextWriter writer, string templateString, TemplateContext context)
+        {
+            // Provide some services to all statements
+            context.AmbientValues[Constants.ViewPathIndex] = "";
+            context.AmbientValues[Constants.SectionsIndex] = null; // it is lazily initialized when first used
+            context.AmbientValues[Constants.RendererIndex] = this;
+
+            if (_fluidViewEngineOptions.RenderingViewAsync != null)
+            {
+                await _fluidViewEngineOptions.RenderingViewAsync.Invoke("", context);
+            }
+
+            // The body is rendered and buffered before the Layout since it can contain fragments 
+            // that need to be rendered as part of the Layout.
+            // Also the body or its _ViewStarts might contain a Layout tag.
+            // The context is not isolated such that variables can be changed by views
+            if (_fluidViewEngineOptions.Parser.TryParse(templateString, out var template, out var errors))
+            {
+                var body = await template.RenderAsync(context, _fluidViewEngineOptions.TextEncoder, isolateContext: false);
+
+                await writer.WriteAsync(body);
+            }
+            else
+            {
+                throw new ParseException(errors);
+            }
+        }
+
+        public virtual async Task RenderTemplateAsync(TextWriter writer, FluidTemplate template, TemplateContext context)
+        {
+            // Provide some services to all statements
+            context.AmbientValues[Constants.ViewPathIndex] = "";
+            context.AmbientValues[Constants.SectionsIndex] = null; // it is lazily initialized when first used
+            context.AmbientValues[Constants.RendererIndex] = this;
+
+            if (_fluidViewEngineOptions.RenderingViewAsync != null)
+            {
+                await _fluidViewEngineOptions.RenderingViewAsync.Invoke("", context);
+            }
+
+            var body = await template.RenderAsync(context, _fluidViewEngineOptions.TextEncoder, isolateContext: false);
+
+            await writer.WriteAsync(body);
+        }
 
         public virtual async Task RenderPartialAsync(TextWriter writer, string relativePath, TemplateContext context)
         {
+            relativePath = ResolvePartialPath(relativePath);
+
             // Substitute View Path
             context.AmbientValues[Constants.ViewPathIndex] = relativePath;
 
@@ -263,7 +311,7 @@ namespace Fluid.ViewEngine
             {
                 using (var sr = new StreamReader(stream))
                 {
-                    var fileContent = sr.ReadToEnd();
+                    var fileContent = await sr.ReadToEndAsync();
                     if (_fluidViewEngineOptions.Parser.TryParse(fileContent, out var template, out var errors))
                     {
                         subTemplates.Add(template);
@@ -276,6 +324,31 @@ namespace Fluid.ViewEngine
                     }
                 }
             }
+        }
+
+        protected virtual string ResolvePartialPath(string relativePartialPath)
+        {
+            return _partialToPartialPathCache.GetOrAdd(relativePartialPath, fileName =>
+            {
+                if (fileName.EndsWith(Constants.ViewExtension, StringComparison.OrdinalIgnoreCase))
+                {
+                    return relativePartialPath;
+                }
+
+                foreach (var location in this._fluidViewEngineOptions.PartialsLocationFormats)
+                {
+                    var partialPath = string.Format(location, fileName);
+
+                    var layoutPathInfo = this._fluidViewEngineOptions.PartialsFileProvider.GetFileInfo(partialPath);
+
+                    if (layoutPathInfo.Exists)
+                    {
+                        return partialPath;
+                    }
+                }
+
+                return fileName;
+            });
         }
     }
 }

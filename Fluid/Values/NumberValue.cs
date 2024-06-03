@@ -1,14 +1,15 @@
 ﻿using Fluid.Utils;
 using System.Globalization;
 using System.Text.Encodings.Web;
+using System.Threading.Tasks;
 
 namespace Fluid.Values
 {
-    /// Numbers are stored as decimal values to handle the best possible precision.
-    /// Decimals also have the capacity of retaining their precision across
-    /// operations:
-    /// 1 * 2 = 2
-    /// 1.0 * 2.0 = 2.00
+    // Numbers are stored as decimal values to handle the best possible precision.
+    // Decimals also have the capacity of retaining their precision across
+    // operations:
+    // 1 * 2 = 2
+    // 1.0 * 2.0 = 2.00
     public sealed class NumberValue : FluidValue, IEquatable<NumberValue>
     {
         public static readonly NumberValue Zero = new NumberValue(0M);

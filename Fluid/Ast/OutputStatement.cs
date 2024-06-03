@@ -14,7 +14,7 @@ namespace Fluid.Ast
 
         public IReadOnlyList<FilterExpression> Filters { get; }
 
-        public override ValueTask<Completion> WriteToAsync(TextWriter writer, TextEncoder encoder, TemplateContext context)
+        public override async ValueTask<Completion> WriteToAsync(TextWriter writer, TextEncoder encoder, TemplateContext context)
         {
             static async ValueTask<Completion> Awaited(
                 ValueTask<FluidValue> t,

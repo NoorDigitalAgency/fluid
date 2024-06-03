@@ -11,6 +11,7 @@ namespace Fluid.Values
     {
         [Obsolete("WriteTo is obsolete, prefer the WriteToAsync method.")]
         public abstract void WriteTo(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo);
+        public abstract ValueTask WriteToAsync(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo);
 
         public virtual ValueTask WriteToAsync(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
         {
