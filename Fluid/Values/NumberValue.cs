@@ -1,4 +1,5 @@
-﻿using Fluid.Utils;
+using Fluid.Utils;
+using System.Buffers;
 using System.Globalization;
 using System.Text.Encodings.Web;
 using System.Threading.Tasks;
@@ -35,8 +36,13 @@ namespace Fluid.Values
 
         public override bool Equals(FluidValue other)
         {
-            // Delegating other types 
+            // Delegating special cases to other types
             if (other == BlankValue.Instance || other == NilValue.Instance || other == EmptyValue.Instance)
+            {
+                return false;
+            }
+
+            if (other.Type != FluidValues.Number)
             {
                 return false;
             }
@@ -59,30 +65,88 @@ namespace Fluid.Values
             return _value.ToString(CultureInfo.InvariantCulture);
         }
 
-        [Obsolete("WriteTo is obsolete, prefer the WriteToAsync method.")]
-        public override void WriteTo(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
+        public override ValueTask WriteToAsync(IFluidOutput output, TextEncoder encoder, CultureInfo cultureInfo)
         {
-            AssertWriteToParameters(writer, encoder, cultureInfo);
-            writer.Write(encoder.Encode(_value.ToString(cultureInfo)));
-        }
+            AssertWriteToParameters(output, encoder, cultureInfo);
 
-        public override ValueTask WriteToAsync(TextWriter writer, TextEncoder encoder, CultureInfo cultureInfo)
-        {
-            AssertWriteToParameters(writer, encoder, cultureInfo);
-            var task = writer.WriteAsync(encoder.Encode(_value.ToString(cultureInfo)));
+            var scale = GetScale(_value);
 
-            if (task.IsCompletedSuccessfully())
+            #if NET8_0_OR_GREATER
+            ReadOnlySpan<char> format = default;
+
+            if (scale == 0)
             {
+                // Default format.
+            }
+            else if (_value * (10 * scale) % (10 * scale) == 0)
+            {
+                // If the decimal part is zero(s), write one only
+                format = "F1";
+            }
+            else
+            {
+                // For larger scales, we use G29 to avoid trailing zeros
+                format = "G29";
+            }
+
+            Span<char> scratch = stackalloc char[64];
+            if (_value.TryFormat(scratch, out var written, format, cultureInfo))
+            {
+                output.Write(encoder, scratch.Slice(0, written));
                 return default;
             }
 
-            return Awaited(task);
-
-            static async ValueTask Awaited(Task t)
+            // Extremely defensive fallback (very unlikely for decimal): rent a larger buffer.
+            // Keep allocation-free in the common case.
+            var pool = ArrayPool<char>.Shared;
+            var rented = pool.Rent(256);
+            try
             {
-                await t;
-                return;
+                var span = rented.AsSpan();
+                if (_value.TryFormat(span, out written, format, cultureInfo))
+                {
+                    output.Write(encoder, span.Slice(0, written));
+                    return default;
+                }
+
+                // Last resort: string formatting.
+                if (format.IsEmpty)
+                {
+                    output.Write(encoder, _value.ToString(cultureInfo));
+                }
+                else
+                {
+                    output.Write(encoder, _value.ToString(format.ToString(), cultureInfo));
+                }
             }
+            finally
+            {
+                pool.Return(rented);
+            }
+            #else
+            if (scale == 0)
+            {
+                // If the scale is zero, we can write the value directly without formatting
+                output.Write(encoder, _value.ToString(cultureInfo));
+            }
+            else if (_value * (10 * scale) % (10 * scale) == 0)
+            {
+                // If the decimal part is zero(s), write one only
+                output.Write(encoder, _value.ToString("F1", cultureInfo));
+            }
+            else
+            {
+                // For larger scales, we use G29 to avoid trailing zeros
+                output.Write(encoder, _value.ToString("G29", cultureInfo));
+            }
+            #endif
+
+            return default;
+        }
+
+        public override IEnumerable<FluidValue> Enumerate(TemplateContext context)
+        {
+            return [this];
         }
 
         public override object ToObjectValue()
@@ -150,16 +214,16 @@ namespace Fluid.Values
             return new NumberValue(value);
         }
 
-        public static int GetScale(decimal value)
+        /// <summary>
+        /// Gets the scale of a decimal value, which is the number of digits to the right of the decimal point.
+        /// </summary>
+        public static byte GetScale(decimal value)
         {
-            if (value == 0)
-            {
-                return 0;
-            }
-
-            var bits = decimal.GetBits(value);
-
-            return (int)((bits[3] >> 16) & 0x7F);
+#if NET8_0_OR_GREATER
+            return value.Scale;
+#else       
+            return unchecked((byte)(decimal.GetBits(value)[3] >> 16));
+#endif
         }
     }
 }

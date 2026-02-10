@@ -1,4 +1,4 @@
-﻿using Fluid.Utils;
+using Fluid.Utils;
 using Fluid.Values;
 using System.Text.Encodings.Web;
 
@@ -6,22 +6,41 @@ namespace Fluid.Ast
 {
     public sealed class CaptureStatement : TagStatement
     {
+        private readonly bool _isWhitespaceOrCommentOnly;
+
         public CaptureStatement(string identifier, IReadOnlyList<Statement> statements) : base(statements)
         {
             Identifier = identifier;
+            
+            _isWhitespaceOrCommentOnly = true;
+            for (var i = 0; i < Statements.Count; i++)
+            {
+                if (!Statements[i].IsWhitespaceOrCommentOnly)
+                {
+                    _isWhitespaceOrCommentOnly = false;
+                    break;
+                }
+            }
         }
 
         public string Identifier { get; }
 
-        public override async ValueTask<Completion> WriteToAsync(TextWriter writer, TextEncoder encoder, TemplateContext context)
+        public override bool IsWhitespaceOrCommentOnly => true;
+
+        public override async ValueTask<Completion> WriteToAsync(IFluidOutput output, TextEncoder encoder, TemplateContext context)
         {
+            if (_isWhitespaceOrCommentOnly)
+            {
+                context.SetValue(Identifier, StringValue.Empty);
+                return Completion.Normal;
+            }
+
             var completion = Completion.Normal;
 
-            using var sb = StringBuilderPool.GetInstance();
-            using var sw = new StringWriter(sb.Builder);
+            using var captureOutput = new BufferFluidOutput();
             for (var i = 0; i < Statements.Count; i++)
             {
-                completion = await Statements[i].WriteToAsync(sw, encoder, context);
+                completion = await Statements[i].WriteToAsync(captureOutput, encoder, context);
 
                 if (completion != Completion.Normal)
                 {
@@ -31,16 +50,16 @@ namespace Fluid.Ast
                 }
             }
 
-            var result = sw.ToString();
+            FluidValue result = new StringValue(captureOutput.ToString(), false);
 
             // Substitute the result if a custom callback is provided
             if (context.Captured != null)
             {
-                result = await context.Captured.Invoke(Identifier, result);
+                result = await context.Captured.Invoke(Identifier, result, context);
             }
 
             // Don't encode captured blocks
-            context.SetValue(Identifier, new StringValue(result, false));
+            context.SetValue(Identifier, result);
 
             return completion;
         }
