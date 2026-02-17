@@ -1,4 +1,4 @@
-﻿using Fluid.Values;
+using Fluid.Values;
 using System.Text.Encodings.Web;
 
 namespace Fluid.Ast
@@ -11,8 +11,6 @@ namespace Fluid.Ast
 #pragma warning restore CA1001
     {
         public const string ViewExtension = ".liquid";
-        private volatile CachedTemplate _cachedTemplate;
-        private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1);
 
         public RenderStatement(FluidParser parser, string path, Expression with = null, Expression @for = null, string alias = null, IReadOnlyList<AssignStatement> assignStatements = null)
         {
@@ -31,57 +29,64 @@ namespace Fluid.Ast
         public Expression For { get; }
         public string Alias { get; }
 
-        public override async ValueTask<Completion> WriteToAsync(TextWriter writer, TextEncoder encoder, TemplateContext context)
+        public override async ValueTask<Completion> WriteToAsync(IFluidOutput output, TextEncoder encoder, TemplateContext context)
         {
             context.IncrementSteps();
 
             var relativePath = Path;
+            var fileProvider = context.Options.FileProvider;
 
-            if (!relativePath.EndsWith(ViewExtension, StringComparison.OrdinalIgnoreCase))
+            // First, try to get the file with the exact path provided
+            var fileInfo = fileProvider.GetFileInfo(relativePath);
+
+            // If the file doesn't exist and a default extension is configured
+            if ((fileInfo == null || !fileInfo.Exists || fileInfo.IsDirectory) && !string.IsNullOrEmpty(context.Options.DefaultFileExtension))
             {
-                relativePath += ViewExtension;
-            }
-
-            if (_cachedTemplate == null || !string.Equals(_cachedTemplate.Name, System.IO.Path.GetFileNameWithoutExtension(relativePath), StringComparison.Ordinal))
-            {
-                await _semaphore.WaitAsync();
-
-                try
+                // Check if the path already ends with the default extension
+                if (!relativePath.EndsWith(context.Options.DefaultFileExtension, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (_cachedTemplate == null || !string.Equals(_cachedTemplate.Name, System.IO.Path.GetFileNameWithoutExtension(relativePath), StringComparison.Ordinal))
+                    // Try adding the default extension
+                    var pathWithExtension = relativePath + context.Options.DefaultFileExtension;
+                    var fileInfoWithExtension = fileProvider.GetFileInfo(pathWithExtension);
+
+                    if (fileInfoWithExtension != null && fileInfoWithExtension.Exists && !fileInfoWithExtension.IsDirectory)
                     {
-                        var fileProvider = context.Options.FileProvider;
-
-                        var fileInfo = fileProvider.GetFileInfo(relativePath);
-
-                        if (fileInfo == null || !fileInfo.Exists)
-                        {
-                            throw new FileNotFoundException(relativePath);
-                        }
-
-                        var content = "";
-
-                        using (var stream = fileInfo.CreateReadStream())
-                        using (var streamReader = new StreamReader(stream))
-                        {
-                            content = await streamReader.ReadToEndAsync();
-                        }
-
-                        if (!Parser.TryParse(content, out var template, out var errors))
-                        {
-                            throw new ParseException(errors);
-                        }
-
-                        var identifier = System.IO.Path.GetFileNameWithoutExtension(relativePath);
-
-                        _cachedTemplate = new CachedTemplate(template, identifier);
+                        relativePath = pathWithExtension;
+                        fileInfo = fileInfoWithExtension;
                     }
                 }
-                finally
-                {
-                    _semaphore.Release();
-                }
             }
+
+            if (fileInfo == null || !fileInfo.Exists || fileInfo.IsDirectory)
+            {
+                throw new FileNotFoundException(relativePath);
+            }
+
+            if (context.Options.TemplateCache == null || !context.Options.TemplateCache.TryGetTemplate(relativePath, fileInfo.LastModified, out var template))
+            {
+                var content = "";
+
+                using (var stream = fileInfo.CreateReadStream())
+                using (var streamReader = new StreamReader(stream))
+                {
+                    content = await streamReader.ReadToEndAsync();
+                }
+
+                if (!Parser.TryParse(content, out template, out var errors))
+                {
+                    throw new ParseException(errors);
+                }
+
+                // Allow user to modify the template before caching (e.g., apply visitors/rewriters)
+                if (context.Options.TemplateParsed != null)
+                {
+                    template = context.Options.TemplateParsed(relativePath, template);
+                }
+
+                context.Options.TemplateCache?.SetTemplate(relativePath, fileInfo.LastModified, template);
+            }
+
+            var identifier = System.IO.Path.GetFileNameWithoutExtension(relativePath);
 
             context.EnterChildScope();
             var previousScope = context.LocalScope;
@@ -95,32 +100,45 @@ namespace Fluid.Ast
                     context.LocalScope = new Scope(context.RootScope);
                     previousScope.CopyTo(context.LocalScope);
 
-                    context.SetValue(Alias ?? _cachedTemplate.Name, with);
-                    await _cachedTemplate.Template.RenderAsync(writer, encoder, context);
-                }
-                else if (AssignStatements.Count > 0)
-                {
-                    var length = AssignStatements.Count;
-                    for (var i = 0; i < length; i++)
+                    context.SetValue(Alias ?? identifier, with);
+
+                    // Evaluate assign statements in the new scope if present
+                    if (AssignStatements.Count > 0)
                     {
-                        await AssignStatements[i].WriteToAsync(writer, encoder, context);
+                        var length = AssignStatements.Count;
+                        for (var i = 0; i < length; i++)
+                        {
+                            await AssignStatements[i].WriteToAsync(output, encoder, context);
+                        }
                     }
 
-                    context.LocalScope = new Scope(context.RootScope);
-                    previousScope.CopyTo(context.LocalScope);
-
-                    await _cachedTemplate.Template.RenderAsync(writer, encoder, context);
+                    await template.RenderAsync(output, encoder, context);
                 }
                 else if (For != null)
                 {
                     try
                     {
-                        var forloop = new ForLoopValue();
+                        var forloop = new ForLoopValue { IsRenderLoop = true };
 
-                        var list = (await For.EvaluateAsync(context)).Enumerate(context).ToList();
+                        var evaluatedFor = await For.EvaluateAsync(context);
+
+                        // Fast-path: avoid re-enumerating already materialized arrays.
+                        IReadOnlyList<FluidValue> list = evaluatedFor is ArrayValue array
+                            ? array.Values
+                            : await evaluatedFor.EnumerateAsync(context).ToListAsync();
 
                         context.LocalScope = new Scope(context.RootScope);
                         previousScope.CopyTo(context.LocalScope);
+
+                        // Evaluate assign statements in the new scope before the loop if present
+                        if (AssignStatements.Count > 0)
+                        {
+                            var assignLength = AssignStatements.Count;
+                            for (var j = 0; j < assignLength; j++)
+                            {
+                                await AssignStatements[j].WriteToAsync(output, encoder, context);
+                            }
+                        }
 
                         var length = forloop.Length = list.Count;
 
@@ -132,17 +150,17 @@ namespace Fluid.Ast
 
                             var item = list[i];
 
-                            context.SetValue(Alias ?? _cachedTemplate.Name, item);
+                            context.SetValue(Alias ?? identifier, item);
 
                             // Set helper variables
                             forloop.Index = i + 1;
                             forloop.Index0 = i;
-                            forloop.RIndex = length - i - 1;
-                            forloop.RIndex0 = length - i;
+                            forloop.RIndex = length - i;
+                            forloop.RIndex0 = length - i - 1;
                             forloop.First = i == 0;
                             forloop.Last = i == length - 1;
 
-                            await _cachedTemplate.Template.RenderAsync(writer, encoder, context);
+                            await template.RenderAsync(output, encoder, context);
 
                             // Restore the forloop property after every statement in case it replaced it,
                             // for instance if it contains a nested for loop
@@ -154,12 +172,25 @@ namespace Fluid.Ast
                         context.LocalScope.Delete("forloop");
                     }
                 }
+                else if (AssignStatements.Count > 0)
+                {
+                    var length = AssignStatements.Count;
+                    for (var i = 0; i < length; i++)
+                    {
+                        await AssignStatements[i].WriteToAsync(output, encoder, context);
+                    }
+
+                    context.LocalScope = new Scope(context.RootScope);
+                    previousScope.CopyTo(context.LocalScope);
+
+                    await template.RenderAsync(output, encoder, context);
+                }
                 else
                 {
                     context.LocalScope = new Scope(context.RootScope);
                     previousScope.CopyTo(context.LocalScope);
 
-                    await _cachedTemplate.Template.RenderAsync(writer, encoder, context);
+                    await template.RenderAsync(output, encoder, context);
                 }
             }
             finally

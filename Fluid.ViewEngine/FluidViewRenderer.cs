@@ -1,5 +1,6 @@
-﻿using Fluid.Ast;
+using Fluid.Ast;
 using Fluid.Parser;
+using Fluid.Utils;
 using Microsoft.Extensions.FileProviders;
 using System;
 using System.Collections.Concurrent;
@@ -16,7 +17,7 @@ namespace Fluid.ViewEngine
     {
         private static readonly char[] PathSeparators = { '/', '\\' };
 
-        private record struct LayoutKey (string ViewPath, string LayoutPath);
+        private record struct LayoutKey(string ViewPath, string LayoutPath);
 
         private class CacheEntry
         {
@@ -28,8 +29,6 @@ namespace Fluid.ViewEngine
         private readonly ConcurrentDictionary<string, string> _partialToPartialPathCache = new();
         private readonly ConcurrentDictionary<LayoutKey, string> _layoutsCache = new();
 
-        private readonly FluidViewEngineOptions _fluidViewEngineOptions;
-
         public FluidViewRenderer(FluidViewEngineOptions fluidViewEngineOptions)
         {
             _fluidViewEngineOptions = fluidViewEngineOptions;
@@ -37,7 +36,27 @@ namespace Fluid.ViewEngine
             _fluidViewEngineOptions.TemplateOptions.FileProvider = _fluidViewEngineOptions.PartialsFileProvider ?? _fluidViewEngineOptions.ViewsFileProvider ?? new NullFileProvider();
         }
 
+        private readonly FluidViewEngineOptions _fluidViewEngineOptions;
+
         public virtual async Task RenderViewAsync(TextWriter writer, string relativePath, TemplateContext context)
+        {
+            if (writer == null)
+            {
+                throw new ArgumentNullException(nameof(writer));
+            }
+
+            var bufferSize = context?.Options?.OutputBufferSize ?? 16 * 1024;
+            if (bufferSize <= 0)
+            {
+                bufferSize = 16 * 1024;
+            }
+
+            using var output = new TextWriterFluidOutput(writer, bufferSize, leaveOpen: true);
+            await RenderViewAsync(output, relativePath, context);
+            await output.FlushAsync();
+        }
+
+        public virtual async Task RenderViewAsync(IFluidOutput output, string relativePath, TemplateContext context)
         {
             // Provide some services to all statements
             context.AmbientValues[Constants.ViewPathIndex] = relativePath;
@@ -51,7 +70,7 @@ namespace Fluid.ViewEngine
                 await _fluidViewEngineOptions.RenderingViewAsync.Invoke(relativePath, context);
             }
 
-            // The body is rendered and buffered before the Layout since it can contain fragments 
+            // The body is rendered and buffered before the Layout since it can contain fragments
             // that need to be rendered as part of the Layout.
             // Also the body or its _ViewStarts might contain a Layout tag.
             // The context is not isolated such that variables can be changed by views
@@ -69,60 +88,33 @@ namespace Fluid.ViewEngine
                 // Parse the Layout file but ignore viewstarts
                 var layoutTemplate = await GetFluidTemplateAsync(layoutPathString, _fluidViewEngineOptions.ViewsFileProvider, includeViewStarts: false);
 
-                await layoutTemplate.RenderAsync(writer, _fluidViewEngineOptions.TextEncoder, context);
+                await layoutTemplate.RenderAsync(output, _fluidViewEngineOptions.TextEncoder, context);
             }
             else
             {
-                await writer.WriteAsync(body);
+                output.Write(body);
             }
-        }
-        
-        public virtual async Task RenderTemplateAsync(TextWriter writer, string templateString, TemplateContext context)
-        {
-            // Provide some services to all statements
-            context.AmbientValues[Constants.ViewPathIndex] = "";
-            context.AmbientValues[Constants.SectionsIndex] = null; // it is lazily initialized when first used
-            context.AmbientValues[Constants.RendererIndex] = this;
-
-            if (_fluidViewEngineOptions.RenderingViewAsync != null)
-            {
-                await _fluidViewEngineOptions.RenderingViewAsync.Invoke("", context);
-            }
-
-            // The body is rendered and buffered before the Layout since it can contain fragments 
-            // that need to be rendered as part of the Layout.
-            // Also the body or its _ViewStarts might contain a Layout tag.
-            // The context is not isolated such that variables can be changed by views
-            if (_fluidViewEngineOptions.Parser.TryParse(templateString, out var template, out var errors))
-            {
-                var body = await template.RenderAsync(context, _fluidViewEngineOptions.TextEncoder, isolateContext: false);
-
-                await writer.WriteAsync(body);
-            }
-            else
-            {
-                throw new ParseException(errors);
-            }
-        }
-
-        public virtual async Task RenderTemplateAsync(TextWriter writer, FluidTemplate template, TemplateContext context)
-        {
-            // Provide some services to all statements
-            context.AmbientValues[Constants.ViewPathIndex] = "";
-            context.AmbientValues[Constants.SectionsIndex] = null; // it is lazily initialized when first used
-            context.AmbientValues[Constants.RendererIndex] = this;
-
-            if (_fluidViewEngineOptions.RenderingViewAsync != null)
-            {
-                await _fluidViewEngineOptions.RenderingViewAsync.Invoke("", context);
-            }
-
-            var body = await template.RenderAsync(context, _fluidViewEngineOptions.TextEncoder, isolateContext: false);
-
-            await writer.WriteAsync(body);
         }
 
         public virtual async Task RenderPartialAsync(TextWriter writer, string relativePath, TemplateContext context)
+        {
+            if (writer == null)
+            {
+                throw new ArgumentNullException(nameof(writer));
+            }
+
+            var bufferSize = context?.Options?.OutputBufferSize ?? 16 * 1024;
+            if (bufferSize <= 0)
+            {
+                bufferSize = 16 * 1024;
+            }
+
+            using var output = new TextWriterFluidOutput(writer, bufferSize, leaveOpen: true);
+            await RenderPartialAsync(output, relativePath, context);
+            await output.FlushAsync();
+        }
+
+        public virtual async Task RenderPartialAsync(IFluidOutput output, string relativePath, TemplateContext context)
         {
             relativePath = ResolvePartialPath(relativePath);
 
@@ -136,14 +128,14 @@ namespace Fluid.ViewEngine
 
             var template = await GetFluidTemplateAsync(relativePath, _fluidViewEngineOptions.PartialsFileProvider, false);
 
-            await template.RenderAsync(writer, _fluidViewEngineOptions.TextEncoder, context);
+            await template.RenderAsync(output, _fluidViewEngineOptions.TextEncoder, context);
         }
 
         protected virtual List<string> FindViewStarts(string viewPath, IFileProvider fileProvider)
         {
             var viewStarts = new List<string>();
             int index = viewPath.Length - 1;
-            
+
             while (!String.IsNullOrEmpty(viewPath))
             {
                 if (index == -1)
@@ -272,6 +264,12 @@ namespace Fluid.ViewEngine
 
             template = await ParseLiquidFileAsync(path, fileProvider, includeViewStarts);
 
+            // Allow user to modify the template before caching (e.g., apply visitors/rewriters)
+            if (_fluidViewEngineOptions.TemplateOptions.TemplateParsed != null)
+            {
+                template = _fluidViewEngineOptions.TemplateOptions.TemplateParsed(path, template);
+            }
+
             cache.TemplateCache[path] = template;
 
             return template;
@@ -287,7 +285,7 @@ namespace Fluid.ViewEngine
             }
 
             var subTemplates = new List<IFluidTemplate>();
-                
+
             if (includeViewStarts)
             {
                 // Add ViewStart files
@@ -297,7 +295,7 @@ namespace Fluid.ViewEngine
                     var callbackTemplate = new FluidTemplate(new CallbackStatement((writer, encoder, context) =>
                     {
                         context.AmbientValues[Constants.ViewPathIndex] = viewStartPath;
-                        return new ValueTask<Completion>(Completion.Normal);
+                        return Statement.NormalCompletion;
                     }));
 
                     var viewStartTemplate = await GetFluidTemplateAsync(viewStartPath, fileProvider, false);

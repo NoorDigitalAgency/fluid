@@ -13,33 +13,60 @@ namespace Fluid.Ast.BinaryExpressions
 
         internal override FluidValue Evaluate(FluidValue leftValue, FluidValue rightValue)
         {
+            bool comparisonResult;
+
             if (leftValue.IsNil() || rightValue.IsNil())
             {
                 if (Strict)
                 {
-                    return BooleanValue.False;
+                    comparisonResult = false;
+                }
+                else
+                {
+                    comparisonResult = leftValue.IsNil() && rightValue.IsNil();
+                }
+            }
+            else if (leftValue is NumberValue)
+            {
+                if (rightValue is not NumberValue)
+                {
+                    throw new LiquidException("comparison of Integer with String failed");
                 }
 
-                return leftValue.IsNil() && rightValue.IsNil()
-                    ? BooleanValue.True
-                    : BooleanValue.False;
-            }
-
-            if (leftValue is NumberValue)
-            {
                 if (Strict)
                 {
-                    return leftValue.ToNumberValue() < rightValue.ToNumberValue()
-                        ? BooleanValue.True
-                        : BooleanValue.False;
+                    comparisonResult = leftValue.ToNumberValue() < rightValue.ToNumberValue();
+                }
+                else
+                {
+                    comparisonResult = leftValue.ToNumberValue() <= rightValue.ToNumberValue();
+                }
+            }
+            else if (leftValue is StringValue)
+            {
+                if (rightValue is not StringValue)
+                {
+                    throw new LiquidException("comparison of String with Integer failed");
                 }
 
-                return leftValue.ToNumberValue() <= rightValue.ToNumberValue()
-                    ? BooleanValue.True
-                    : BooleanValue.False;
+                // Use standard C# string comparison for strings
+                var comparison = string.Compare(leftValue.ToStringValue(), rightValue.ToStringValue(), StringComparison.Ordinal);
+                if (Strict)
+                {
+                    comparisonResult = comparison < 0;
+                }
+                else
+                {
+                    comparisonResult = comparison <= 0;
+                }
+            }
+            else
+            {
+                // For non-number, non-string types, return nil as left operand with false comparison
+                return new BinaryExpressionFluidValue(NilValue.Instance, false);
             }
 
-            return NilValue.Instance;
+            return new BinaryExpressionFluidValue(leftValue, comparisonResult);
         }
 
         protected internal override Expression Accept(AstVisitor visitor) => visitor.VisitLowerThanBinaryExpression(this);

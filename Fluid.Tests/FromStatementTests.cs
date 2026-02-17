@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Encodings.Web;
 using System.Threading.Tasks;
@@ -11,10 +11,12 @@ namespace Fluid.Tests;
 
 public class FromStatementTests
 {
+    // Enable all parsing options to ensure these custom features don't interfere with standard templates.
+
 #if COMPILED
-        private static FluidParser _parser = new FluidParser(new FluidParserOptions { AllowFunctions = true }).Compile();
+        private static FluidParser _parser = new FluidParser(new FluidParserOptions { AllowFunctions = true, AllowParentheses = true }).Compile();
 #else
-    private static FluidParser _parser = new FluidParser(new FluidParserOptions { AllowFunctions = true });
+    private static FluidParser _parser = new FluidParser(new FluidParserOptions { AllowFunctions = true, AllowParentheses = true });
 #endif
 
     [Fact]
@@ -60,7 +62,7 @@ public class FromStatementTests
         await fromStatement.WriteToAsync(sw, HtmlEncoder.Default, context);
 
         Assert.IsType<FunctionValue>(context.GetValue("hello_world"));
-        Assert.IsType<NilValue>(context.GetValue("hello"));
+        Assert.IsType<UndefinedValue>(context.GetValue("hello"));
     }
 
     [Fact]
