@@ -1,11 +1,11 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net8.0;net9.0;net10.0</TargetFrameworks>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <IsPackable>true</IsPackable>
-    <PackageId>Fluid.Core</PackageId>
+    <PackageId>NoorFluid.Core</PackageId>
     <Title>Fluid Template Engine</Title>
     <Description>Fluid is a template engine based on the Liquid markup, with focus on performance and .NET programming patterns.</Description>
     <PackageTags>fluid;liquid;template;view engine</PackageTags>
