@@ -309,7 +309,7 @@ namespace Fluid.ViewEngine
             {
                 using (var sr = new StreamReader(stream))
                 {
-                    var fileContent = await sr.ReadToEndAsync();
+                    var fileContent = sr.ReadToEnd();
                     if (_fluidViewEngineOptions.Parser.TryParse(fileContent, out var template, out var errors))
                     {
                         subTemplates.Add(template);
