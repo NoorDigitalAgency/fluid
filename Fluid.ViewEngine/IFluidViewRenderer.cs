@@ -1,5 +1,4 @@
 using Fluid.Parser;
-using System.IO;
 using System.Threading.Tasks;
 
 namespace Fluid.ViewEngine
@@ -8,5 +7,6 @@ namespace Fluid.ViewEngine
     {
         Task RenderViewAsync(IFluidOutput output, string path, TemplateContext context);
         Task RenderPartialAsync(IFluidOutput output, string path, TemplateContext context);
+        Task RenderTemplateAsync(IFluidOutput output, FluidTemplate template, TemplateContext context);
     }
 }

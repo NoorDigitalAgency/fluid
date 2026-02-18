@@ -56,6 +56,39 @@ namespace Fluid.ViewEngine
             await output.FlushAsync();
         }
 
+        public virtual async Task RenderTemplateAsync(IFluidOutput output, FluidTemplate template, TemplateContext context)
+        {
+            // Provide some services to all statements
+            context.AmbientValues[Constants.ViewPathIndex] = "";
+            context.AmbientValues[Constants.SectionsIndex] = null; // it is lazily initialized when first used
+            context.AmbientValues[Constants.RendererIndex] = this;
+
+            if (_fluidViewEngineOptions.RenderingViewAsync != null)
+            {
+                await _fluidViewEngineOptions.RenderingViewAsync.Invoke("", context);
+            }
+
+            var body = await template.RenderAsync(context, _fluidViewEngineOptions.TextEncoder, isolateContext: false);
+
+            // If a layout is specified while rendering a view, execute it
+            if (context.AmbientValues.TryGetValue(Constants.LayoutIndex, out var layoutPath) && layoutPath is string layoutPathString && !String.IsNullOrEmpty(layoutPathString))
+            {
+                layoutPathString = ResolveLayoutPath("", layoutPathString, _fluidViewEngineOptions.ViewsFileProvider);
+
+                context.AmbientValues[Constants.ViewPathIndex] = layoutPathString;
+                context.AmbientValues[Constants.BodyIndex] = body;
+
+                // Parse the Layout file but ignore viewstarts
+                var layoutTemplate = await GetFluidTemplateAsync(layoutPathString, _fluidViewEngineOptions.ViewsFileProvider, includeViewStarts: false);
+
+                await layoutTemplate.RenderAsync(output, _fluidViewEngineOptions.TextEncoder, context);
+            }
+            else
+            {
+                output.Write(body);
+            }
+        }
+
         public virtual async Task RenderViewAsync(IFluidOutput output, string relativePath, TemplateContext context)
         {
             // Provide some services to all statements
